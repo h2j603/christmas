@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Text Mosaic Generator</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
+</head>
+<body>
+    <div id="app">
+        <div id="fullscreen-view" class="hidden">
+            <div id="canvas-holder"></div>
+            <button id="closeFullscreen" class="close-btn">✕</button>
+        </div>
+
+        <section id="controls">
+            <div class="scroll-container">
+                <h1 class="title">TEXT MOSAIC</h1>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>START TEXT</label>
+                        <textarea id="textInput" rows="2">A</textarea>
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>END TEXT</label>
+                        <textarea id="textInput2" rows="2">B</textarea>
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>MORPH SPEED: <span id="morphSpeedVal">2</span></label>
+                        <input type="range" id="morphSpeed" min="0.5" max="5" value="2" step="0.1">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field color-field">
+                        <label>CANVAS</label>
+                        <input type="color" id="bgColor" value="#000000">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>TEXT SIZE: <span id="fontSizeVal">50</span>%</label>
+                        <input type="range" id="fontSize" min="5" max="150" value="50">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>TILE SIZE: <span id="tileSizeVal">5</span>%</label>
+                        <input type="range" id="tileSize" min="1" max="20" value="5">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>장평: <span id="scaleXVal">100</span>%</label>
+                        <input type="range" id="scaleX" min="30" max="200" value="100">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>자간: <span id="letterSpaceVal">0</span></label>
+                        <input type="range" id="letterSpace" min="-20" max="50" value="0">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>행간: <span id="lineHeightVal">120</span>%</label>
+                        <input type="range" id="lineHeight" min="50" max="250" value="120">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>EFFECTS</label>
+                        <div class="toggle-group">
+                            <button id="toggleLine" class="toggle-btn">WEB</button>
+                            <button id="toggleRotate" class="toggle-btn">ROTATE</button>
+                            <button id="togglePulse" class="toggle-btn">PULSE</button>
+                            <button id="toggleMorph" class="toggle-btn">MORPH</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <button id="convertBtn" class="btn-ui primary-accent">CONVERT</button>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>CANVAS W</label>
+                        <input type="number" id="canvasW" value="360">
+                    </div>
+                    <div class="field">
+                        <label>CANVAS H</label>
+                        <input type="number" id="canvasH" value="400">
+                    </div>
+                    <button id="resizeBtn">SET</button>
+                </div>
+
+                <div class="input-row buttons">
+                    <label for="imageInput" class="btn-ui">PHOTO</label>
+                    <input type="file" id="imageInput" accept="image/*">
+                    <button id="previewBtn" class="btn-ui">PREVIEW</button>
+                </div>
+
+                <div class="input-row buttons">
+                    <button id="saveBtn" class="btn-ui">SAVE IMG</button>
+                    <div class="field" style="flex: 0 0 60px;">
+                        <input type="number" id="videoDuration" value="3" min="1" max="30" style="padding: 14px 8px; text-align: center;">
+                    </div>
+                    <button id="saveVideoBtn" class="btn-ui">REC</button>
+                </div>
+                
+                <p id="info-text" class="status-msg">1. 사진 선택 → 2. 변환 → 3. 미리보기</p>
+                <div class="safe-area-padding"></div>
+            </div>
+        </section>
+    </div>
+    <script src="sketch.js"></script>
+</body>
+</html>
