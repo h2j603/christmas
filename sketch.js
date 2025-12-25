@@ -14,9 +14,9 @@ let showPulse = false;
 let showMorph = false;
 
 // 모핑 관련
-let morphProgress = 0;  // 0 ~ 1 사이값
-let morphDirection = 1; // 1: 앞으로, -1: 뒤로
-let morphDuration = 2;  // 초 단위
+let morphProgress = 0;
+let morphDirection = 1;
+let morphDuration = 2;
 
 // 저장된 설정값
 let currentFontSize = 50;
@@ -24,6 +24,16 @@ let currentTileSize = 5;
 let currentScaleX = 100;
 let currentLetterSpace = 0;
 let currentLineHeight = 120;
+
+// 텍스트 위치 오프셋
+let textOffsetX = 0;
+let textOffsetY = 0;
+
+// 배경 설정
+let gradientType = 'none';
+let gradAngle = 0;
+let noiseAmount = 0;
+let noiseBuffer;
 
 // 텍스트 중심점
 let textCenterX = 0;
@@ -44,7 +54,6 @@ function setup() {
     textCenterX = w / 2;
     textCenterY = h / 2;
     
-    // 폰트 로드
     const fontURL = 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxP.ttf';
     myFont = loadFont(fontURL, 
         () => { 
@@ -86,6 +95,43 @@ function setup() {
         morphDuration = parseFloat(select('#morphDuration').value());
     });
     
+    // 텍스트 위치 조절
+    select('#textOffsetX').input(() => {
+        select('#textOffsetXVal').html(select('#textOffsetX').value());
+        textOffsetX = parseInt(select('#textOffsetX').value());
+    });
+    select('#textOffsetY').input(() => {
+        select('#textOffsetYVal').html(select('#textOffsetY').value());
+        textOffsetY = parseInt(select('#textOffsetY').value());
+    });
+    
+    // 그라디언트 각도
+    select('#gradAngle').input(() => {
+        select('#gradAngleVal').html(select('#gradAngle').value());
+        gradAngle = parseInt(select('#gradAngle').value());
+    });
+    
+    // 노이즈
+    select('#noiseAmount').input(() => {
+        select('#noiseAmountVal').html(select('#noiseAmount').value());
+        noiseAmount = parseInt(select('#noiseAmount').value());
+        generateNoiseBuffer();
+    });
+    
+    // 그라디언트 타입 버튼
+    select('#gradNone').mousePressed(() => {
+        gradientType = 'none';
+        updateGradientButtons();
+    });
+    select('#gradLinear').mousePressed(() => {
+        gradientType = 'linear';
+        updateGradientButtons();
+    });
+    select('#gradRadial').mousePressed(() => {
+        gradientType = 'radial';
+        updateGradientButtons();
+    });
+    
     // 토글 버튼
     select('#toggleLine').mousePressed(() => {
         showWeb = !showWeb;
@@ -110,6 +156,8 @@ function setup() {
             morphDirection = 1;
         }
     });
+    
+    generateNoiseBuffer();
 }
 
 function toggleClass(selector, isActive) {
@@ -121,8 +169,7 @@ function toggleClass(selector, isActive) {
 }
 
 function draw() {
-    let bgColor = select('#bgColor').value();
-    background(bgColor);
+    drawBackground();
     
     if (!isFontLoaded) {
         fill(255);
@@ -132,9 +179,8 @@ function draw() {
         return;
     }
 
-    // 모핑 업데이트 (시간 기반)
+    // 모핑 업데이트
     if (showMorph && tiles1.length > 0 && tiles2.length > 0) {
-        // 60fps 기준으로 시간 계산
         let progressPerFrame = 1 / (morphDuration * 60);
         morphProgress += morphDirection * progressPerFrame;
         
@@ -148,14 +194,13 @@ function draw() {
         
         updateMorphedTiles();
     } else if (!showMorph && tiles1.length > 0) {
-        // 모핑 OFF면 tiles1 원본 그대로 표시
         currentTiles = tiles1;
     }
 
     push();
     translate(width/2, height/2);
     scale(zoom);
-    translate(-textCenterX + offset.x, -textCenterY + offset.y);
+    translate(-textCenterX + offset.x + textOffsetX, -textCenterY + offset.y + textOffsetY);
 
     if (!img) {
         fill(100);
@@ -172,29 +217,109 @@ function draw() {
     pop();
 }
 
+function drawBackground() {
+    let c1 = color(select('#bgColor').value());
+    let c2 = color(select('#bgColor2').value());
+    
+    if (gradientType === 'none') {
+        background(c1);
+    } else if (gradientType === 'linear') {
+        drawLinearGradient(c1, c2);
+    } else if (gradientType === 'radial') {
+        drawRadialGradient(c1, c2);
+    }
+    
+    if (noiseAmount > 0 && noiseBuffer) {
+        push();
+        blendMode(ADD);
+        tint(255, noiseAmount * 2.55);
+        image(noiseBuffer, 0, 0);
+        pop();
+    }
+}
+
+function drawLinearGradient(c1, c2) {
+    push();
+    noFill();
+    let angleRad = radians(gradAngle);
+    let cx = width / 2;
+    let cy = height / 2;
+    let diagonal = sqrt(width * width + height * height);
+    
+    for (let i = 0; i <= diagonal; i++) {
+        let t = i / diagonal;
+        let c = lerpColor(c1, c2, t);
+        stroke(c);
+        
+        let x1 = cx + cos(angleRad + HALF_PI) * diagonal;
+        let y1 = cy + sin(angleRad + HALF_PI) * diagonal;
+        let x2 = cx - cos(angleRad + HALF_PI) * diagonal;
+        let y2 = cy - sin(angleRad + HALF_PI) * diagonal;
+        
+        let offsetX = cos(angleRad) * (i - diagonal/2);
+        let offsetY = sin(angleRad) * (i - diagonal/2);
+        
+        line(x1 + offsetX, y1 + offsetY, x2 + offsetX, y2 + offsetY);
+    }
+    pop();
+}
+
+function drawRadialGradient(c1, c2) {
+    push();
+    noStroke();
+    let maxR = sqrt(width * width + height * height) / 2;
+    
+    for (let r = maxR; r > 0; r -= 2) {
+        let t = 1 - (r / maxR);
+        let c = lerpColor(c1, c2, t);
+        fill(c);
+        ellipse(width/2, height/2, r * 2, r * 2);
+    }
+    pop();
+}
+
+function generateNoiseBuffer() {
+    noiseBuffer = createGraphics(width, height);
+    noiseBuffer.loadPixels();
+    
+    for (let i = 0; i < noiseBuffer.pixels.length; i += 4) {
+        let v = random(255);
+        noiseBuffer.pixels[i] = v;
+        noiseBuffer.pixels[i + 1] = v;
+        noiseBuffer.pixels[i + 2] = v;
+        noiseBuffer.pixels[i + 3] = 255;
+    }
+    
+    noiseBuffer.updatePixels();
+}
+
+function updateGradientButtons() {
+    select('#gradNone').removeClass('active');
+    select('#gradLinear').removeClass('active');
+    select('#gradRadial').removeClass('active');
+    
+    if (gradientType === 'none') select('#gradNone').addClass('active');
+    else if (gradientType === 'linear') select('#gradLinear').addClass('active');
+    else if (gradientType === 'radial') select('#gradRadial').addClass('active');
+}
+
 function updateMorphedTiles() {
-    // 적은 쪽 포인트 수 기준으로 모핑 (형태 유지)
     let count = min(tiles1.length, tiles2.length);
     currentTiles = [];
     
-    // 이징 함수 (smoothstep)
     let t = morphProgress;
     let easedT = t * t * (3 - 2 * t);
     
-    // 각 텍스트에서 사용할 포인트 (균등 분포)
     for (let i = 0; i < count; i++) {
-        // 각 배열에서 균등하게 샘플링
         let idx1 = floor(map(i, 0, count, 0, tiles1.length));
         let idx2 = floor(map(i, 0, count, 0, tiles2.length));
         
         let t1 = tiles1[idx1];
         let t2 = tiles2[idx2];
         
-        // 선형 보간 + 약간의 곡선 움직임
         let midX = lerp(t1.x, t2.x, easedT);
         let midY = lerp(t1.y, t2.y, easedT);
         
-        // 부드러운 곡선 효과 추가
         let curveAmount = sin(easedT * PI) * 15;
         let angle = atan2(t2.y - t1.y, t2.x - t1.x) + HALF_PI;
         midX += cos(angle) * curveAmount * sin(i * 0.1);
@@ -210,16 +335,14 @@ function updateMorphedTiles() {
 
 function drawWebLines() {
     strokeWeight(0.8);
-    
     let maxDist = min(width, height) * 0.1;
-    let tilesToDraw = currentTiles.length > 0 ? currentTiles : tiles1;
     
-    for (let i = 0; i < tilesToDraw.length; i++) {
-        let t1 = tilesToDraw[i];
+    for (let i = 0; i < currentTiles.length; i++) {
+        let t1 = currentTiles[i];
         
         let connections = 0;
-        for (let j = i + 1; j < tilesToDraw.length && connections < 4; j++) {
-            let t2 = tilesToDraw[j];
+        for (let j = i + 1; j < currentTiles.length && connections < 4; j++) {
+            let t2 = currentTiles[j];
             let d = dist(t1.x, t1.y, t2.x, t2.y);
             
             if (d < maxDist) {
@@ -236,8 +359,8 @@ function drawWebLines() {
         
         randomSeed(i * 100);
         if (random(1) < 0.03) {
-            let randomIdx = floor(random(tilesToDraw.length));
-            let t2 = tilesToDraw[randomIdx];
+            let randomIdx = floor(random(currentTiles.length));
+            let t2 = currentTiles[randomIdx];
             let lineClr = getImageColor(t1.x, t1.y);
             stroke(red(lineClr), green(lineClr), blue(lineClr), 40);
             line(t1.x, t1.y, t2.x, t2.y);
@@ -258,13 +381,11 @@ function getImageColor(x, y) {
 
 function drawTiles() {
     let baseTileSize = min(width, height) * (currentTileSize / 100);
-    let tilesToDraw = currentTiles.length > 0 ? currentTiles : tiles1;
     
-    for (let i = 0; i < tilesToDraw.length; i++) {
-        let t = tilesToDraw[i];
+    for (let i = 0; i < currentTiles.length; i++) {
+        let t = currentTiles[i];
         let tileSize = baseTileSize;
         
-        // PULSE 효과 (크기 변화)
         if (showPulse) {
             let pulse = sin(frameCount * 0.05 + i * 0.3) * 0.3 + 1;
             tileSize *= pulse;
@@ -285,7 +406,6 @@ function drawTiles() {
 
 function generateTextPoints(txt, targetArray) {
     let lines = txt.split('\n');
-    
     let fontSize = min(width, height) * (currentFontSize / 100);
     let density = map(currentTileSize, 1, 20, 0.5, 0.03);
     
@@ -340,8 +460,7 @@ function generateTextPoints(txt, targetArray) {
                 targetArray.push({
                     x: finalX,
                     y: finalY,
-                    index: targetArray.length,
-                    isOriginal: true  // 원본 포인트
+                    index: targetArray.length
                 });
             }
             
@@ -372,7 +491,6 @@ function generateDisplay() {
     currentLetterSpace = parseInt(select('#letterSpace').value());
     currentLineHeight = parseInt(select('#lineHeight').value());
     
-    // 두 텍스트의 포인트 생성
     generateTextPoints(txt1, tiles1);
     generateTextPoints(txt2, tiles2);
     
@@ -381,14 +499,13 @@ function generateDisplay() {
         return;
     }
     
-    // 포인트 수 맞추기 - 각 텍스트 형태 내에서 복제
-    balancePointsWithinShape(tiles1, tiles2);
+    // 각 텍스트를 캔버스 중앙으로 정규화
+    normalizeToCenter(tiles1);
+    normalizeToCenter(tiles2);
     
-    // 중심점은 캔버스 중앙으로 고정
     textCenterX = width / 2;
     textCenterY = height / 2;
     
-    // 초기 상태 설정 - tiles1 원본 복사 (복제 없이)
     currentTiles = tiles1.map(t => ({...t}));
     morphProgress = 0;
     morphDirection = 1;
@@ -396,19 +513,12 @@ function generateDisplay() {
     offset = createVector(0, 0);
     zoom = 1.0;
     
-    updateStatus("타일 " + tiles1.length + "개 생성됨 (모핑 준비 완료)");
-}
-
-function balancePointsWithinShape(arr1, arr2) {
-    // 포인트 복제 없이 각 텍스트의 중심만 캔버스 중앙으로 이동
-    normalizeToCenter(arr1);
-    normalizeToCenter(arr2);
+    updateStatus("타일 " + tiles1.length + "개 생성됨");
 }
 
 function normalizeToCenter(arr) {
     if (arr.length === 0) return;
     
-    // 현재 중심점 계산
     let minX = Infinity, maxX = -Infinity;
     let minY = Infinity, maxY = -Infinity;
     
@@ -422,44 +532,12 @@ function normalizeToCenter(arr) {
     let centerX = (minX + maxX) / 2;
     let centerY = (minY + maxY) / 2;
     
-    // 캔버스 중앙으로 이동
     let offsetX = width / 2 - centerX;
     let offsetY = height / 2 - centerY;
     
     for (let t of arr) {
         t.x += offsetX;
         t.y += offsetY;
-    }
-}
-
-function sortByProximity(arr1, arr2) {
-    // arr2의 각 포인트를 arr1의 가장 가까운 포인트 순서로 재배열
-    let used = new Set();
-    let newArr2 = [];
-    
-    for (let i = 0; i < arr1.length; i++) {
-        let minDist = Infinity;
-        let minIdx = -1;
-        
-        for (let j = 0; j < arr2.length; j++) {
-            if (used.has(j)) continue;
-            let d = dist(arr1[i].x, arr1[i].y, arr2[j].x, arr2[j].y);
-            if (d < minDist) {
-                minDist = d;
-                minIdx = j;
-            }
-        }
-        
-        if (minIdx >= 0) {
-            used.add(minIdx);
-            newArr2.push(arr2[minIdx]);
-        }
-    }
-    
-    // arr2 업데이트
-    for (let i = 0; i < newArr2.length; i++) {
-        arr2[i] = newArr2[i];
-        arr2[i].index = i;
     }
 }
 
@@ -505,13 +583,11 @@ function startRecording() {
     
     recordedChunks = [];
     
-    // 고화질 설정
     let options = {
         mimeType: 'video/webm;codecs=vp9',
-        videoBitsPerSecond: 20000000  // 20 Mbps
+        videoBitsPerSecond: 20000000
     };
     
-    // vp9 지원 안되면 vp8로 폴백
     if (!MediaRecorder.isTypeSupported(options.mimeType)) {
         options.mimeType = 'video/webm;codecs=vp8';
     }
@@ -540,7 +616,6 @@ function startRecording() {
         updateStatus("비디오 저장됨!");
     };
     
-    // 모핑 초기화
     morphProgress = 0;
     morphDirection = 1;
     offset = createVector(0, 0);
@@ -586,6 +661,7 @@ function updateCanvas() {
     zoom = 1.0;
     textCenterX = width / 2;
     textCenterY = height / 2;
+    generateNoiseBuffer();
     updateStatus("캔버스: " + width + "x" + height);
 }
 
