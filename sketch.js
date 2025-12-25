@@ -16,7 +16,7 @@ let showMorph = false;
 // 모핑 관련
 let morphProgress = 0;  // 0 ~ 1 사이값
 let morphDirection = 1; // 1: 앞으로, -1: 뒤로
-let morphSpeed = 2;
+let morphDuration = 2;  // 초 단위
 
 // 저장된 설정값
 let currentFontSize = 50;
@@ -81,9 +81,9 @@ function setup() {
     select('#lineHeight').input(() => {
         select('#lineHeightVal').html(select('#lineHeight').value());
     });
-    select('#morphSpeed').input(() => {
-        select('#morphSpeedVal').html(select('#morphSpeed').value());
-        morphSpeed = parseFloat(select('#morphSpeed').value());
+    select('#morphDuration').input(() => {
+        select('#morphDurationVal').html(select('#morphDuration').value());
+        morphDuration = parseFloat(select('#morphDuration').value());
     });
     
     // 토글 버튼
@@ -132,9 +132,11 @@ function draw() {
         return;
     }
 
-    // 모핑 업데이트
+    // 모핑 업데이트 (시간 기반)
     if (showMorph && tiles1.length > 0 && tiles2.length > 0) {
-        morphProgress += morphDirection * morphSpeed * 0.01;
+        // 60fps 기준으로 시간 계산
+        let progressPerFrame = 1 / (morphDuration * 60);
+        morphProgress += morphDirection * progressPerFrame;
         
         if (morphProgress >= 1) {
             morphProgress = 1;
@@ -184,7 +186,7 @@ function updateMorphedTiles() {
         let midY = lerp(t1.y, t2.y, easedT);
         
         // 부드러운 곡선 효과 추가
-        let curveAmount = sin(easedT * PI) * 20;
+        let curveAmount = sin(easedT * PI) * 15;
         let angle = atan2(t2.y - t1.y, t2.x - t1.x) + HALF_PI;
         midX += cos(angle) * curveAmount * sin(i * 0.1);
         midY += sin(angle) * curveAmount * sin(i * 0.1);
@@ -369,28 +371,12 @@ function generateDisplay() {
         return;
     }
     
-    // 포인트 수 맞추기 (더 많은 쪽에 맞춤)
-    balancePoints(tiles1, tiles2);
+    // 포인트 수 맞추기 - 각 텍스트 형태 내에서 복제
+    balancePointsWithinShape(tiles1, tiles2);
     
-    // 중심점 계산
-    let allMinX = Infinity, allMaxX = -Infinity;
-    let allMinY = Infinity, allMaxY = -Infinity;
-    
-    for (let t of tiles1) {
-        allMinX = min(allMinX, t.x);
-        allMaxX = max(allMaxX, t.x);
-        allMinY = min(allMinY, t.y);
-        allMaxY = max(allMaxY, t.y);
-    }
-    for (let t of tiles2) {
-        allMinX = min(allMinX, t.x);
-        allMaxX = max(allMaxX, t.x);
-        allMinY = min(allMinY, t.y);
-        allMaxY = max(allMaxY, t.y);
-    }
-    
-    textCenterX = (allMinX + allMaxX) / 2;
-    textCenterY = (allMinY + allMaxY) / 2;
+    // 중심점은 캔버스 중앙으로 고정
+    textCenterX = width / 2;
+    textCenterY = height / 2;
     
     // 초기 상태 설정
     currentTiles = tiles1.map(t => ({...t}));
@@ -403,27 +389,67 @@ function generateDisplay() {
     updateStatus("타일 " + tiles1.length + "개 생성됨 (모핑 준비 완료)");
 }
 
-function balancePoints(arr1, arr2) {
-    // 포인트 수를 맞추기 위해 부족한 쪽에 랜덤하게 복제
-    while (arr1.length < arr2.length) {
+function balancePointsWithinShape(arr1, arr2) {
+    // 각 배열의 포인트를 자기 형태 내에서만 복제
+    let targetCount = max(arr1.length, arr2.length);
+    
+    // arr1이 부족하면 arr1 형태 내에서 복제
+    while (arr1.length < targetCount) {
         let idx = floor(random(arr1.length));
+        let basePoint = arr1[idx];
+        // 같은 형태 내의 가까운 위치에 복제
         arr1.push({
-            x: arr1[idx].x + random(-5, 5),
-            y: arr1[idx].y + random(-5, 5),
+            x: basePoint.x + random(-3, 3),
+            y: basePoint.y + random(-3, 3),
             index: arr1.length
         });
     }
-    while (arr2.length < arr1.length) {
+    
+    // arr2가 부족하면 arr2 형태 내에서 복제
+    while (arr2.length < targetCount) {
         let idx = floor(random(arr2.length));
+        let basePoint = arr2[idx];
+        // 같은 형태 내의 가까운 위치에 복제
         arr2.push({
-            x: arr2[idx].x + random(-5, 5),
-            y: arr2[idx].y + random(-5, 5),
+            x: basePoint.x + random(-3, 3),
+            y: basePoint.y + random(-3, 3),
             index: arr2.length
         });
     }
     
-    // 가까운 포인트끼리 매칭 (간단한 그리디 알고리즘)
+    // 정규화: 각 텍스트의 중심을 캔버스 중앙으로 이동
+    normalizeToCenter(arr1);
+    normalizeToCenter(arr2);
+    
+    // 가까운 포인트끼리 매칭
     sortByProximity(arr1, arr2);
+}
+
+function normalizeToCenter(arr) {
+    if (arr.length === 0) return;
+    
+    // 현재 중심점 계산
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    
+    for (let t of arr) {
+        minX = min(minX, t.x);
+        maxX = max(maxX, t.x);
+        minY = min(minY, t.y);
+        maxY = max(maxY, t.y);
+    }
+    
+    let centerX = (minX + maxX) / 2;
+    let centerY = (minY + maxY) / 2;
+    
+    // 캔버스 중앙으로 이동
+    let offsetX = width / 2 - centerX;
+    let offsetY = height / 2 - centerY;
+    
+    for (let t of arr) {
+        t.x += offsetX;
+        t.y += offsetY;
+    }
 }
 
 function sortByProximity(arr1, arr2) {
@@ -495,10 +521,25 @@ function startRecording() {
     duration = constrain(duration, 1, 30);
     
     let canvas = document.querySelector('#canvas-holder canvas');
-    let stream = canvas.captureStream(30);
+    let stream = canvas.captureStream(60);
     
     recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    
+    // 고화질 설정
+    let options = {
+        mimeType: 'video/webm;codecs=vp9',
+        videoBitsPerSecond: 20000000  // 20 Mbps
+    };
+    
+    // vp9 지원 안되면 vp8로 폴백
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options.mimeType = 'video/webm;codecs=vp8';
+    }
+    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+        options.mimeType = 'video/webm';
+    }
+    
+    mediaRecorder = new MediaRecorder(stream, options);
     
     mediaRecorder.ondataavailable = (e) => {
         if (e.data.size > 0) {
