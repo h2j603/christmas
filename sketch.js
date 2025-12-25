@@ -147,6 +147,9 @@ function draw() {
         }
         
         updateMorphedTiles();
+    } else if (!showMorph && tiles1.length > 0) {
+        // 모핑 OFF면 tiles1 원본 그대로 표시
+        currentTiles = tiles1;
     }
 
     push();
@@ -170,16 +173,22 @@ function draw() {
 }
 
 function updateMorphedTiles() {
-    let count = max(tiles1.length, tiles2.length);
+    // 적은 쪽 포인트 수 기준으로 모핑 (형태 유지)
+    let count = min(tiles1.length, tiles2.length);
     currentTiles = [];
     
     // 이징 함수 (smoothstep)
     let t = morphProgress;
     let easedT = t * t * (3 - 2 * t);
     
+    // 각 텍스트에서 사용할 포인트 (균등 분포)
     for (let i = 0; i < count; i++) {
-        let t1 = tiles1[i % tiles1.length];
-        let t2 = tiles2[i % tiles2.length];
+        // 각 배열에서 균등하게 샘플링
+        let idx1 = floor(map(i, 0, count, 0, tiles1.length));
+        let idx2 = floor(map(i, 0, count, 0, tiles2.length));
+        
+        let t1 = tiles1[idx1];
+        let t2 = tiles2[idx2];
         
         // 선형 보간 + 약간의 곡선 움직임
         let midX = lerp(t1.x, t2.x, easedT);
@@ -331,7 +340,8 @@ function generateTextPoints(txt, targetArray) {
                 targetArray.push({
                     x: finalX,
                     y: finalY,
-                    index: targetArray.length
+                    index: targetArray.length,
+                    isOriginal: true  // 원본 포인트
                 });
             }
             
@@ -378,7 +388,7 @@ function generateDisplay() {
     textCenterX = width / 2;
     textCenterY = height / 2;
     
-    // 초기 상태 설정
+    // 초기 상태 설정 - tiles1 원본 복사 (복제 없이)
     currentTiles = tiles1.map(t => ({...t}));
     morphProgress = 0;
     morphDirection = 1;
@@ -390,39 +400,9 @@ function generateDisplay() {
 }
 
 function balancePointsWithinShape(arr1, arr2) {
-    // 각 배열의 포인트를 자기 형태 내에서만 복제
-    let targetCount = max(arr1.length, arr2.length);
-    
-    // arr1이 부족하면 arr1 형태 내에서 복제
-    while (arr1.length < targetCount) {
-        let idx = floor(random(arr1.length));
-        let basePoint = arr1[idx];
-        // 같은 형태 내의 가까운 위치에 복제
-        arr1.push({
-            x: basePoint.x + random(-3, 3),
-            y: basePoint.y + random(-3, 3),
-            index: arr1.length
-        });
-    }
-    
-    // arr2가 부족하면 arr2 형태 내에서 복제
-    while (arr2.length < targetCount) {
-        let idx = floor(random(arr2.length));
-        let basePoint = arr2[idx];
-        // 같은 형태 내의 가까운 위치에 복제
-        arr2.push({
-            x: basePoint.x + random(-3, 3),
-            y: basePoint.y + random(-3, 3),
-            index: arr2.length
-        });
-    }
-    
-    // 정규화: 각 텍스트의 중심을 캔버스 중앙으로 이동
+    // 포인트 복제 없이 각 텍스트의 중심만 캔버스 중앙으로 이동
     normalizeToCenter(arr1);
     normalizeToCenter(arr2);
-    
-    // 가까운 포인트끼리 매칭
-    sortByProximity(arr1, arr2);
 }
 
 function normalizeToCenter(arr) {
