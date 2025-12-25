@@ -41,8 +41,51 @@
 
                 <div class="input-row">
                     <div class="field color-field">
-                        <label>CANVAS</label>
+                        <label>BG COLOR 1</label>
                         <input type="color" id="bgColor" value="#000000">
+                    </div>
+                    <div class="field color-field">
+                        <label>BG COLOR 2</label>
+                        <input type="color" id="bgColor2" value="#000000">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>GRADIENT</label>
+                        <div class="toggle-group">
+                            <button id="gradNone" class="toggle-btn active">NONE</button>
+                            <button id="gradLinear" class="toggle-btn">LINEAR</button>
+                            <button id="gradRadial" class="toggle-btn">RADIAL</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>GRADIENT 각도: <span id="gradAngleVal">0</span>°</label>
+                        <input type="range" id="gradAngle" min="0" max="360" value="0">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>NOISE: <span id="noiseAmountVal">0</span>%</label>
+                        <input type="range" id="noiseAmount" min="0" max="100" value="0">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>TEXT X: <span id="textOffsetXVal">0</span></label>
+                        <input type="range" id="textOffsetX" min="-200" max="200" value="0">
+                    </div>
+                </div>
+
+                <div class="input-row">
+                    <div class="field">
+                        <label>TEXT Y: <span id="textOffsetYVal">0</span></label>
+                        <input type="range" id="textOffsetY" min="-200" max="200" value="0">
                     </div>
                 </div>
 
