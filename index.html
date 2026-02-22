@@ -5,52 +5,149 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Text Mosaic Generator</title>
     <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.js"></script>
 </head>
 <body>
     <div id="app">
+        <!-- Fullscreen Preview -->
         <div id="fullscreen-view" class="hidden">
             <div id="canvas-holder"></div>
-            <button id="closeFullscreen" class="close-btn">✕</button>
+            <button id="closeFullscreen" class="close-btn">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+                    <path d="M1 1L17 17M17 1L1 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </button>
         </div>
 
+        <!-- Main Controls Panel -->
         <section id="controls">
             <div class="scroll-container">
-                <h1 class="title">TEXT MOSAIC</h1>
+                <!-- Header -->
+                <div class="header">
+                    <h1 class="logo">TEXT<br>MOSAIC</h1>
+                    <span class="version">v2.0</span>
+                </div>
 
-                <div class="input-row">
+                <!-- Layers Section -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>LAYERS</h2>
+                        <button id="addLayerBtn" class="icon-btn" title="레이어 추가">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                <path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div id="layerList" class="layer-list"></div>
+                </div>
+
+                <!-- Active Layer Settings -->
+                <div id="layerSettings" class="section">
+                    <div class="section-header">
+                        <h2 id="activeLayerTitle">LAYER 1</h2>
+                    </div>
+
                     <div class="field">
-                        <label>START TEXT</label>
-                        <textarea id="textInput" rows="2">A</textarea>
+                        <label>TEXT</label>
+                        <textarea id="layerText" rows="2" placeholder="텍스트 입력...">A</textarea>
                     </div>
-                </div>
 
-                <div class="input-row">
                     <div class="field">
-                        <label>END TEXT</label>
-                        <textarea id="textInput2" rows="2">B</textarea>
+                        <label>MORPH TEXT</label>
+                        <textarea id="layerMorphText" rows="2" placeholder="모핑 대상 텍스트...">B</textarea>
                     </div>
-                </div>
 
-                <div class="input-row">
+                    <div class="row-2">
+                        <div class="field">
+                            <label>TEXT SIZE <span class="val" id="layerFontSizeVal">50</span>%</label>
+                            <input type="range" id="layerFontSize" min="5" max="150" value="50">
+                        </div>
+                        <div class="field">
+                            <label>TILE SIZE <span class="val" id="layerTileSizeVal">5</span>%</label>
+                            <input type="range" id="layerTileSize" min="1" max="20" value="5">
+                        </div>
+                    </div>
+
+                    <div class="row-2">
+                        <div class="field">
+                            <label>장평 <span class="val" id="layerScaleXVal">100</span>%</label>
+                            <input type="range" id="layerScaleX" min="30" max="200" value="100">
+                        </div>
+                        <div class="field">
+                            <label>자간 <span class="val" id="layerLetterSpaceVal">0</span></label>
+                            <input type="range" id="layerLetterSpace" min="-20" max="50" value="0">
+                        </div>
+                    </div>
+
                     <div class="field">
-                        <label>MORPH 시간: <span id="morphDurationVal">2</span>초</label>
-                        <input type="range" id="morphDuration" min="0.5" max="10" value="2" step="0.5">
+                        <label>행간 <span class="val" id="layerLineHeightVal">120</span>%</label>
+                        <input type="range" id="layerLineHeight" min="50" max="250" value="120">
+                    </div>
+
+                    <div class="row-2">
+                        <div class="field">
+                            <label>X 위치 <span class="val" id="layerOffsetXVal">0</span></label>
+                            <input type="range" id="layerOffsetX" min="-300" max="300" value="0">
+                        </div>
+                        <div class="field">
+                            <label>Y 위치 <span class="val" id="layerOffsetYVal">0</span></label>
+                            <input type="range" id="layerOffsetY" min="-300" max="300" value="0">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label>OPACITY <span class="val" id="layerOpacityVal">100</span>%</label>
+                        <input type="range" id="layerOpacity" min="0" max="100" value="100">
+                    </div>
+
+                    <div class="field">
+                        <label>BLEND MODE</label>
+                        <select id="layerBlendMode">
+                            <option value="source-over">Normal</option>
+                            <option value="multiply">Multiply</option>
+                            <option value="screen">Screen</option>
+                            <option value="overlay">Overlay</option>
+                            <option value="difference">Difference</option>
+                            <option value="exclusion">Exclusion</option>
+                            <option value="lighten">Lighten</option>
+                            <option value="darken">Darken</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label>MORPH 시간 <span class="val" id="layerMorphDurVal">2</span>초</label>
+                        <input type="range" id="layerMorphDuration" min="0.5" max="10" value="2" step="0.5">
+                    </div>
+
+                    <div class="field">
+                        <label>EFFECTS</label>
+                        <div class="toggle-group">
+                            <button class="toggle-btn effect-btn" data-effect="web">WEB</button>
+                            <button class="toggle-btn effect-btn" data-effect="rotate">ROTATE</button>
+                            <button class="toggle-btn effect-btn" data-effect="pulse">PULSE</button>
+                            <button class="toggle-btn effect-btn" data-effect="morph">MORPH</button>
+                        </div>
                     </div>
                 </div>
 
-                <div class="input-row">
-                    <div class="field color-field">
-                        <label>BG COLOR 1</label>
-                        <input type="color" id="bgColor" value="#000000">
+                <!-- Background Section -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>BACKGROUND</h2>
                     </div>
-                    <div class="field color-field">
-                        <label>BG COLOR 2</label>
-                        <input type="color" id="bgColor2" value="#000000">
-                    </div>
-                </div>
 
-                <div class="input-row">
+                    <div class="row-2">
+                        <div class="field">
+                            <label>COLOR 1</label>
+                            <input type="color" id="bgColor" value="#0a0a0a">
+                        </div>
+                        <div class="field">
+                            <label>COLOR 2</label>
+                            <input type="color" id="bgColor2" value="#0a0a0a">
+                        </div>
+                    </div>
+
                     <div class="field">
                         <label>GRADIENT</label>
                         <div class="toggle-group">
@@ -59,115 +156,64 @@
                             <button id="gradRadial" class="toggle-btn">RADIAL</button>
                         </div>
                     </div>
-                </div>
 
-                <div class="input-row">
                     <div class="field">
-                        <label>GRADIENT 각도: <span id="gradAngleVal">0</span>°</label>
+                        <label>GRADIENT 각도 <span class="val" id="gradAngleVal">0</span>°</label>
                         <input type="range" id="gradAngle" min="0" max="360" value="0">
                     </div>
-                </div>
 
-                <div class="input-row">
                     <div class="field">
-                        <label>NOISE: <span id="noiseAmountVal">0</span>%</label>
+                        <label>NOISE <span class="val" id="noiseAmountVal">0</span>%</label>
                         <input type="range" id="noiseAmount" min="0" max="100" value="0">
                     </div>
                 </div>
 
-                <div class="input-row">
-                    <div class="field">
-                        <label>TEXT X: <span id="textOffsetXVal">0</span></label>
-                        <input type="range" id="textOffsetX" min="-200" max="200" value="0">
+                <!-- Canvas & Export Section -->
+                <div class="section">
+                    <div class="section-header">
+                        <h2>CANVAS & EXPORT</h2>
                     </div>
-                </div>
 
-                <div class="input-row">
-                    <div class="field">
-                        <label>TEXT Y: <span id="textOffsetYVal">0</span></label>
-                        <input type="range" id="textOffsetY" min="-200" max="200" value="0">
-                    </div>
-                </div>
-
-                <div class="input-row">
-                    <div class="field">
-                        <label>TEXT SIZE: <span id="fontSizeVal">50</span>%</label>
-                        <input type="range" id="fontSize" min="5" max="150" value="50">
-                    </div>
-                </div>
-
-                <div class="input-row">
-                    <div class="field">
-                        <label>TILE SIZE: <span id="tileSizeVal">5</span>%</label>
-                        <input type="range" id="tileSize" min="1" max="20" value="5">
-                    </div>
-                </div>
-
-                <div class="input-row">
-                    <div class="field">
-                        <label>장평: <span id="scaleXVal">100</span>%</label>
-                        <input type="range" id="scaleX" min="30" max="200" value="100">
-                    </div>
-                </div>
-
-                <div class="input-row">
-                    <div class="field">
-                        <label>자간: <span id="letterSpaceVal">0</span></label>
-                        <input type="range" id="letterSpace" min="-20" max="50" value="0">
-                    </div>
-                </div>
-
-                <div class="input-row">
-                    <div class="field">
-                        <label>행간: <span id="lineHeightVal">120</span>%</label>
-                        <input type="range" id="lineHeight" min="50" max="250" value="120">
-                    </div>
-                </div>
-
-                <div class="input-row">
-                    <div class="field">
-                        <label>EFFECTS</label>
-                        <div class="toggle-group">
-                            <button id="toggleLine" class="toggle-btn">WEB</button>
-                            <button id="toggleRotate" class="toggle-btn">ROTATE</button>
-                            <button id="togglePulse" class="toggle-btn">PULSE</button>
-                            <button id="toggleMorph" class="toggle-btn">MORPH</button>
+                    <div class="row-3">
+                        <div class="field">
+                            <label>W</label>
+                            <input type="number" id="canvasW" value="360">
                         </div>
+                        <div class="field">
+                            <label>H</label>
+                            <input type="number" id="canvasH" value="400">
+                        </div>
+                        <button id="resizeBtn" class="btn-sm">SET</button>
+                    </div>
+
+                    <div class="row-2">
+                        <label for="imageInput" class="btn-action upload-btn">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                                <path d="M7 1V10M3 5L7 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
+                            PHOTO
+                        </label>
+                        <input type="file" id="imageInput" accept="image/*">
+                        <button id="convertBtn" class="btn-action primary">CONVERT</button>
+                    </div>
+
+                    <div class="row-2">
+                        <button id="previewBtn" class="btn-action">PREVIEW</button>
+                        <button id="saveBtn" class="btn-action">SAVE IMG</button>
+                    </div>
+
+                    <div class="row-3">
+                        <button id="saveVideoBtn" class="btn-action rec-btn">● REC</button>
+                        <div class="field">
+                            <input type="number" id="videoDuration" value="3" min="1" max="30" style="text-align:center;">
+                        </div>
+                        <span class="unit-label">초</span>
                     </div>
                 </div>
 
-                <div class="input-row">
-                    <button id="convertBtn" class="btn-ui primary-accent">CONVERT</button>
-                </div>
-
-                <div class="input-row">
-                    <div class="field">
-                        <label>CANVAS W</label>
-                        <input type="number" id="canvasW" value="360">
-                    </div>
-                    <div class="field">
-                        <label>CANVAS H</label>
-                        <input type="number" id="canvasH" value="400">
-                    </div>
-                    <button id="resizeBtn">SET</button>
-                </div>
-
-                <div class="input-row buttons">
-                    <label for="imageInput" class="btn-ui">PHOTO</label>
-                    <input type="file" id="imageInput" accept="image/*">
-                    <button id="previewBtn" class="btn-ui">PREVIEW</button>
-                </div>
-
-                <div class="input-row buttons">
-                    <button id="saveBtn" class="btn-ui">SAVE IMG</button>
-                    <div class="field" style="flex: 0 0 60px;">
-                        <input type="number" id="videoDuration" value="3" min="1" max="30" style="padding: 14px 8px; text-align: center;">
-                    </div>
-                    <button id="saveVideoBtn" class="btn-ui">REC</button>
-                </div>
-                
-                <p id="info-text" class="status-msg">1. 사진 선택 → 2. 변환 → 3. 미리보기</p>
-                <div class="safe-area-padding"></div>
+                <p id="info-text" class="status-msg">사진 선택 → 변환 → 미리보기</p>
+                <div class="safe-bottom"></div>
             </div>
         </section>
     </div>
