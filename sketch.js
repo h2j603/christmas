@@ -1,774 +1,590 @@
-let myFont;
-let img;
-let tiles1 = [];  // 시작 텍스트 포인트
-let tiles2 = [];  // 끝 텍스트 포인트
-let currentTiles = [];  // 현재 표시되는 포인트
-let zoom = 1.0;
-let offset;
-let isFontLoaded = false;
-
-// 효과 토글
-let showWeb = false;
-let showRotate = false;
-let showPulse = false;
-let showMorph = false;
-
-// 모핑 관련
-let morphProgress = 0;
-let morphDirection = 1;
-let morphDuration = 2;
-
-// 저장된 설정값
-let currentFontSize = 50;
-let currentTileSize = 5;
-let currentScaleX = 100;
-let currentLetterSpace = 0;
-let currentLineHeight = 120;
-
-// 텍스트 위치 오프셋
-let textOffsetX = 0;
-let textOffsetY = 0;
-
-// 배경 설정
-let gradientType = 'none';
-let gradAngle = 0;
-let noiseAmount = 0;
-let noiseBuffer;
-
-// 텍스트 중심점
-let textCenterX = 0;
-let textCenterY = 0;
-
-// 비디오 녹화
-let isRecording = false;
-let mediaRecorder = null;
-let recordedChunks = [];
-
-function setup() {
-    const w = parseInt(select('#canvasW').value());
-    const h = parseInt(select('#canvasH').value());
-    let canvas = createCanvas(w, h);
-    canvas.parent('canvas-holder');
-    
-    offset = createVector(0, 0);
-    textCenterX = w / 2;
-    textCenterY = h / 2;
-    
-    const fontURL = 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxP.ttf';
-    myFont = loadFont(fontURL, 
-        () => { 
-            isFontLoaded = true; 
-            updateStatus("준비 완료 - 기본 텍스트 표시 중");
-            generateDefaultTiles();
-        },
-        () => { 
-            updateStatus("폰트 로드 실패");
-        }
-    );
-    
-    // 버튼 이벤트
-    select('#convertBtn').mousePressed(generateDisplay);
-    select('#resizeBtn').mousePressed(updateCanvas);
-    select('#saveBtn').mousePressed(saveImage);
-    select('#saveVideoBtn').mousePressed(startRecording);
-    select('#previewBtn').mousePressed(showPreview);
-    select('#closeFullscreen').mousePressed(hidePreview);
-    select('#imageInput').changed(handleImage);
-    
-    // 슬라이더 값 표시
-    select('#fontSize').input(() => {
-        select('#fontSizeVal').html(select('#fontSize').value());
-        currentFontSize = parseInt(select('#fontSize').value());
-        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
-        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
-        normalizeTiles();
-        redraw();
-    });
-    select('#tileSize').input(() => {
-        select('#tileSizeVal').html(select('#tileSize').value());
-        currentTileSize = parseInt(select('#tileSize').value());
-        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
-        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
-        normalizeTiles();
-        redraw();
-    });
-    select('#scaleX').input(() => {
-        select('#scaleXVal').html(select('#scaleX').value());
-        currentScaleX = parseInt(select('#scaleX').value());
-        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
-        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
-        normalizeTiles();
-        redraw();
-    });
-    select('#letterSpace').input(() => {
-        select('#letterSpaceVal').html(select('#letterSpace').value());
-        currentLetterSpace = parseInt(select('#letterSpace').value());
-        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
-        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
-        normalizeTiles();
-        redraw();
-    });
-    select('#lineHeight').input(() => {
-        select('#lineHeightVal').html(select('#lineHeight').value());
-        currentLineHeight = parseInt(select('#lineHeight').value());
-        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
-        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
-        normalizeTiles();
-        redraw();
-    });
-    select('#morphDuration').input(() => {
-        select('#morphDurationVal').html(select('#morphDuration').value());
-        morphDuration = parseFloat(select('#morphDuration').value());
-    });
-    
-    // 텍스트 위치 조절
-    select('#textOffsetX').input(() => {
-        select('#textOffsetXVal').html(select('#textOffsetX').value());
-        textOffsetX = parseInt(select('#textOffsetX').value());
-        redraw();
-    });
-    select('#textOffsetY').input(() => {
-        select('#textOffsetYVal').html(select('#textOffsetY').value());
-        textOffsetY = parseInt(select('#textOffsetY').value());
-        redraw();
-    });
-    
-    // 그라디언트 각도
-    select('#gradAngle').input(() => {
-        select('#gradAngleVal').html(select('#gradAngle').value());
-        gradAngle = parseInt(select('#gradAngle').value());
-        redraw();
-    });
-    
-    // 노이즈
-    select('#noiseAmount').input(() => {
-        select('#noiseAmountVal').html(select('#noiseAmount').value());
-        noiseAmount = parseInt(select('#noiseAmount').value());
-        generateNoiseBuffer();
-        redraw();
-    });
-    
-    // 그라디언트 타입 버튼
-    select('#gradNone').mousePressed(() => {
-        gradientType = 'none';
-        updateGradientButtons();
-    });
-    select('#gradLinear').mousePressed(() => {
-        gradientType = 'linear';
-        updateGradientButtons();
-    });
-    select('#gradRadial').mousePressed(() => {
-        gradientType = 'radial';
-        updateGradientButtons();
-    });
-    
-    // 토글 버튼
-    select('#toggleLine').mousePressed(() => {
-        showWeb = !showWeb;
-        toggleClass('#toggleLine', showWeb);
-    });
-    
-    select('#toggleRotate').mousePressed(() => {
-        showRotate = !showRotate;
-        toggleClass('#toggleRotate', showRotate);
-    });
-    
-    select('#togglePulse').mousePressed(() => {
-        showPulse = !showPulse;
-        toggleClass('#togglePulse', showPulse);
-    });
-    
-    select('#toggleMorph').mousePressed(() => {
-        showMorph = !showMorph;
-        toggleClass('#toggleMorph', showMorph);
-        if (showMorph) {
-            morphProgress = 0;
-            morphDirection = 1;
-        }
-    });
-    
-    generateNoiseBuffer();
-    
-    // 텍스트 입력 실시간 반영
-    select('#textInput').input(() => {
-        if (tiles1.length > 0) {
-            generateTextPoints(getText1(), tiles1);
-            normalizeTiles();
-            redraw();
-        }
-    });
-    select('#textInput2').input(() => {
-        if (tiles2.length > 0) {
-            generateTextPoints(getText2(), tiles2);
-            normalizeTiles();
-            redraw();
-        }
-    });
-    
-    // 배경색 실시간 반영
-    select('#bgColor').input(redraw);
-    select('#bgColor2').input(redraw);
+/* ─── Reset ─── */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
 }
 
-function toggleClass(selector, isActive) {
-    if (isActive) {
-        select(selector).addClass('active');
-    } else {
-        select(selector).removeClass('active');
-    }
+:root {
+    --bg-0: #0a0a0a;
+    --bg-1: #111113;
+    --bg-2: #1a1a1e;
+    --bg-3: #242429;
+    --border: #2a2a30;
+    --border-hover: #3a3a42;
+    --text-1: #f0f0f2;
+    --text-2: #a0a0a8;
+    --text-3: #606068;
+    --accent: #e8e8ec;
+    --accent-dim: #3a3a42;
+    --danger: #ff4455;
+    --rec: #ff3344;
+    --active: #d0d0d8;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-sans: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
-function getText1() {
-    return document.getElementById('textInput').value || "A";
+body, html {
+    height: 100dvh;
+    background: var(--bg-0);
+    color: var(--text-1);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    overflow: hidden;
 }
 
-function getText2() {
-    return document.getElementById('textInput2').value || "B";
+#app {
+    height: 100dvh;
 }
 
-function normalizeTiles() {
-    if (tiles1.length > 0) normalizeToCenter(tiles1);
-    if (tiles2.length > 0) normalizeToCenter(tiles2);
-    textCenterX = width / 2;
-    textCenterY = height / 2;
-    currentTiles = tiles1.map(t => ({...t}));
+/* ─── Fullscreen Preview ─── */
+#fullscreen-view {
+    position: fixed;
+    inset: 0;
+    background: #000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
 }
 
-function generateDefaultTiles() {
-    currentFontSize = parseInt(select('#fontSize').value());
-    currentTileSize = parseInt(select('#tileSize').value());
-    currentScaleX = parseInt(select('#scaleX').value());
-    currentLetterSpace = parseInt(select('#letterSpace').value());
-    currentLineHeight = parseInt(select('#lineHeight').value());
-    
-    let txt1 = getText1();
-    let txt2 = getText2();
-    
-    generateTextPoints(txt1, tiles1);
-    generateTextPoints(txt2, tiles2);
-    
-    normalizeTiles();
-    
-    // 데모용 기본 이미지 생성
-    img = createGraphics(width, height);
-    img.background(50);
-    img.noStroke();
-    for (let i = 0; i < 200; i++) {
-        img.fill(random(100, 255), random(100, 255), random(200, 255));
-        img.ellipse(random(width), random(height), random(20, 80));
-    }
-    
-    updateStatus("기본 모자이크 준비됨 - 슬라이더 조정 가능");
+#fullscreen-view.hidden {
+    display: none;
 }
 
-function draw() {
-    drawBackground();
-    
-    if (!isFontLoaded) {
-        fill(255);
-        textAlign(CENTER, CENTER);
-        textFont('sans-serif');
-        text("LOADING FONT...", width/2, height/2);
-        return;
-    }
-
-    // 모핑 업데이트
-    if (showMorph && tiles1.length > 0 && tiles2.length > 0) {
-        let progressPerFrame = 1 / (morphDuration * 60);
-        morphProgress += morphDirection * progressPerFrame;
-        
-        if (morphProgress >= 1) {
-            morphProgress = 1;
-            morphDirection = -1;
-        } else if (morphProgress <= 0) {
-            morphProgress = 0;
-            morphDirection = 1;
-        }
-        
-        updateMorphedTiles();
-    } else if (!showMorph && tiles1.length > 0) {
-        currentTiles = tiles1;
-    }
-
-    push();
-    translate(width/2, height/2);
-    scale(zoom);
-    translate(-textCenterX + offset.x + textOffsetX, -textCenterY + offset.y + textOffsetY);
-
-    if (!img) {
-        fill(100);
-        textAlign(CENTER, CENTER);
-        textFont('sans-serif');
-        text("1. SELECT PHOTO\n2. CLICK CONVERT", textCenterX, textCenterY);
-    } else if (currentTiles.length > 0) {
-        if (showWeb) {
-            drawWebLines();
-        }
-        drawTiles();
-    }
-    
-    pop();
+#canvas-holder {
+    line-height: 0;
 }
 
-function drawBackground() {
-    let c1 = color(select('#bgColor').value());
-    let c2 = color(select('#bgColor2').value());
-    
-    if (gradientType === 'none') {
-        background(c1);
-    } else if (gradientType === 'linear') {
-        drawLinearGradient(c1, c2);
-    } else if (gradientType === 'radial') {
-        drawRadialGradient(c1, c2);
-    }
-    
-    if (noiseAmount > 0 && noiseBuffer) {
-        push();
-        blendMode(ADD);
-        tint(255, noiseAmount * 2.55);
-        image(noiseBuffer, 0, 0);
-        pop();
-    }
+.close-btn {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: var(--text-2);
+    border-radius: 50%;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: all 0.2s;
+    backdrop-filter: blur(10px);
 }
 
-function drawLinearGradient(c1, c2) {
-    push();
-    noFill();
-    let angleRad = radians(gradAngle);
-    let cx = width / 2;
-    let cy = height / 2;
-    let diagonal = sqrt(width * width + height * height);
-    
-    for (let i = 0; i <= diagonal; i++) {
-        let t = i / diagonal;
-        let c = lerpColor(c1, c2, t);
-        stroke(c);
-        
-        let x1 = cx + cos(angleRad + HALF_PI) * diagonal;
-        let y1 = cy + sin(angleRad + HALF_PI) * diagonal;
-        let x2 = cx - cos(angleRad + HALF_PI) * diagonal;
-        let y2 = cy - sin(angleRad + HALF_PI) * diagonal;
-        
-        let offsetX = cos(angleRad) * (i - diagonal/2);
-        let offsetY = sin(angleRad) * (i - diagonal/2);
-        
-        line(x1 + offsetX, y1 + offsetY, x2 + offsetX, y2 + offsetY);
-    }
-    pop();
+.close-btn:hover {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
 }
 
-function drawRadialGradient(c1, c2) {
-    push();
-    noStroke();
-    let maxR = sqrt(width * width + height * height) / 2;
-    
-    for (let r = maxR; r > 0; r -= 2) {
-        let t = 1 - (r / maxR);
-        let c = lerpColor(c1, c2, t);
-        fill(c);
-        ellipse(width/2, height/2, r * 2, r * 2);
-    }
-    pop();
+/* ─── Controls Panel ─── */
+#controls {
+    height: 100dvh;
+    background: var(--bg-1);
+    display: flex;
+    flex-direction: column;
 }
 
-function generateNoiseBuffer() {
-    noiseBuffer = createGraphics(width, height);
-    noiseBuffer.loadPixels();
-    
-    for (let i = 0; i < noiseBuffer.pixels.length; i += 4) {
-        let v = random(255);
-        noiseBuffer.pixels[i] = v;
-        noiseBuffer.pixels[i + 1] = v;
-        noiseBuffer.pixels[i + 2] = v;
-        noiseBuffer.pixels[i + 3] = 255;
-    }
-    
-    noiseBuffer.updatePixels();
+.scroll-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--bg-3) transparent;
 }
 
-function updateGradientButtons() {
-    select('#gradNone').removeClass('active');
-    select('#gradLinear').removeClass('active');
-    select('#gradRadial').removeClass('active');
-    
-    if (gradientType === 'none') select('#gradNone').addClass('active');
-    else if (gradientType === 'linear') select('#gradLinear').addClass('active');
-    else if (gradientType === 'radial') select('#gradRadial').addClass('active');
+.scroll-container::-webkit-scrollbar {
+    width: 4px;
+}
+.scroll-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+.scroll-container::-webkit-scrollbar-thumb {
+    background: var(--bg-3);
+    border-radius: 2px;
 }
 
-function updateMorphedTiles() {
-    let count = min(tiles1.length, tiles2.length);
-    currentTiles = [];
-    
-    let t = morphProgress;
-    let easedT = t * t * (3 - 2 * t);
-    
-    for (let i = 0; i < count; i++) {
-        let idx1 = floor(map(i, 0, count, 0, tiles1.length));
-        let idx2 = floor(map(i, 0, count, 0, tiles2.length));
-        
-        let t1 = tiles1[idx1];
-        let t2 = tiles2[idx2];
-        
-        let midX = lerp(t1.x, t2.x, easedT);
-        let midY = lerp(t1.y, t2.y, easedT);
-        
-        let curveAmount = sin(easedT * PI) * 15;
-        let angle = atan2(t2.y - t1.y, t2.x - t1.x) + HALF_PI;
-        midX += cos(angle) * curveAmount * sin(i * 0.1);
-        midY += sin(angle) * curveAmount * sin(i * 0.1);
-        
-        currentTiles.push({
-            x: midX,
-            y: midY,
-            index: i
-        });
-    }
+/* ─── Header ─── */
+.header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 14px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--border);
 }
 
-function drawWebLines() {
-    strokeWeight(0.8);
-    let maxDist = min(width, height) * 0.1;
-    
-    for (let i = 0; i < currentTiles.length; i++) {
-        let t1 = currentTiles[i];
-        
-        let connections = 0;
-        for (let j = i + 1; j < currentTiles.length && connections < 4; j++) {
-            let t2 = currentTiles[j];
-            let d = dist(t1.x, t1.y, t2.x, t2.y);
-            
-            if (d < maxDist) {
-                let midX = (t1.x + t2.x) / 2;
-                let midY = (t1.y + t2.y) / 2;
-                let lineClr = getImageColor(midX, midY);
-                
-                let alpha = map(d, 0, maxDist, 200, 30);
-                stroke(red(lineClr), green(lineClr), blue(lineClr), alpha);
-                line(t1.x, t1.y, t2.x, t2.y);
-                connections++;
-            }
-        }
-        
-        randomSeed(i * 100);
-        if (random(1) < 0.03) {
-            let randomIdx = floor(random(currentTiles.length));
-            let t2 = currentTiles[randomIdx];
-            let lineClr = getImageColor(t1.x, t1.y);
-            stroke(red(lineClr), green(lineClr), blue(lineClr), 40);
-            line(t1.x, t1.y, t2.x, t2.y);
-        }
-    }
+.logo {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 800;
+    line-height: 0.95;
+    letter-spacing: -0.5px;
+    color: var(--text-1);
 }
 
-function getImageColor(x, y) {
-    if (!img) return color(255);
-    
-    let imgX = floor(map(x, 0, width, 0, img.width));
-    let imgY = floor(map(y, 0, height, 0, img.height));
-    imgX = constrain(imgX, 0, img.width - 1);
-    imgY = constrain(imgY, 0, img.height - 1);
-    
-    return img.get(imgX, imgY);
+.version {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-3);
+    letter-spacing: 1px;
 }
 
-function drawTiles() {
-    let baseTileSize = min(width, height) * (currentTileSize / 100);
-    
-    for (let i = 0; i < currentTiles.length; i++) {
-        let t = currentTiles[i];
-        let tileSize = baseTileSize;
-        
-        if (showPulse) {
-            let pulse = sin(frameCount * 0.05 + i * 0.3) * 0.3 + 1;
-            tileSize *= pulse;
-        }
-        
-        push();
-        translate(t.x, t.y);
-        
-        if (showRotate) {
-            randomSeed(i);
-            rotate(random(-0.4, 0.4));
-        }
-        
-        image(img, -tileSize/2, -tileSize/2, tileSize, tileSize);
-        pop();
-    }
+/* ─── Sections ─── */
+.section {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 8px;
 }
 
-function generateTextPoints(txt, targetArray) {
-    let lines = txt.split('\n');
-    let fontSize = min(width, height) * (currentFontSize / 100);
-    let density = map(currentTileSize, 1, 20, 0.5, 0.03);
-    
-    targetArray.length = 0;
-    
-    let lineHeightPx = fontSize * (currentLineHeight / 100);
-    let totalHeight = lines.length * lineHeightPx;
-    let startY = (height - totalHeight) / 2 + fontSize * 0.8;
-    
-    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-        let lineTxt = lines[lineIdx];
-        if (lineTxt.trim() === '') continue;
-        
-        let chars = lineTxt.split('');
-        let totalWidth = 0;
-        
-        for (let c = 0; c < chars.length; c++) {
-            if (chars[c] === ' ') {
-                totalWidth += fontSize * 0.3 * (currentScaleX / 100);
-            } else {
-                let charBounds = myFont.textBounds(chars[c], 0, 0, fontSize);
-                totalWidth += charBounds.w * (currentScaleX / 100);
-            }
-            if (c < chars.length - 1) {
-                totalWidth += currentLetterSpace;
-            }
-        }
-        
-        let startX = (width - totalWidth) / 2;
-        let y = startY + lineIdx * lineHeightPx;
-        let currentX = startX;
-        
-        for (let c = 0; c < chars.length; c++) {
-            let char = chars[c];
-            if (char === ' ') {
-                currentX += fontSize * 0.3 * (currentScaleX / 100) + currentLetterSpace;
-                continue;
-            }
-            
-            let charBounds = myFont.textBounds(char, 0, 0, fontSize);
-            
-            let outlinePoints = myFont.textToPoints(char, 0, 0, fontSize, {
-                sampleFactor: density,
-                simplifyThreshold: 0
-            });
-            
-            for (let p of outlinePoints) {
-                let scaledX = p.x * (currentScaleX / 100);
-                let finalX = currentX + scaledX;
-                let finalY = y + p.y;
-                
-                targetArray.push({
-                    x: finalX,
-                    y: finalY,
-                    index: targetArray.length
-                });
-            }
-            
-            currentX += charBounds.w * (currentScaleX / 100) + currentLetterSpace;
-        }
-    }
-    
-    return targetArray;
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
 }
 
-function generateDisplay() {
-    if (!isFontLoaded || !myFont) {
-        updateStatus("폰트 로딩 중...");
-        return;
-    }
-    
-    if (!img) {
-        updateStatus("이미지를 먼저 선택하세요!");
-        return;
-    }
-    
-    let txt1 = document.getElementById('textInput').value || "A";
-    let txt2 = document.getElementById('textInput2').value || "B";
-    
-    currentFontSize = parseInt(select('#fontSize').value());
-    currentTileSize = parseInt(select('#tileSize').value());
-    currentScaleX = parseInt(select('#scaleX').value());
-    currentLetterSpace = parseInt(select('#letterSpace').value());
-    currentLineHeight = parseInt(select('#lineHeight').value());
-    
-    generateTextPoints(txt1, tiles1);
-    generateTextPoints(txt2, tiles2);
-    
-    if (tiles1.length === 0 || tiles2.length === 0) {
-        updateStatus("에러: 포인트 추출 실패");
-        return;
-    }
-    
-    // 각 텍스트를 캔버스 중앙으로 정규화
-    normalizeToCenter(tiles1);
-    normalizeToCenter(tiles2);
-    
-    textCenterX = width / 2;
-    textCenterY = height / 2;
-    
-    currentTiles = tiles1.map(t => ({...t}));
-    morphProgress = 0;
-    morphDirection = 1;
-    
-    offset = createVector(0, 0);
-    zoom = 1.0;
-    
-    updateStatus("타일 " + tiles1.length + "개 생성됨");
+.section-header h2 {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-2);
 }
 
-function normalizeToCenter(arr) {
-    if (arr.length === 0) return;
-    
-    let minX = Infinity, maxX = -Infinity;
-    let minY = Infinity, maxY = -Infinity;
-    
-    for (let t of arr) {
-        minX = min(minX, t.x);
-        maxX = max(maxX, t.x);
-        minY = min(minY, t.y);
-        maxY = max(maxY, t.y);
-    }
-    
-    let centerX = (minX + maxX) / 2;
-    let centerY = (minY + maxY) / 2;
-    
-    let offsetX = width / 2 - centerX;
-    let offsetY = height / 2 - centerY;
-    
-    for (let t of arr) {
-        t.x += offsetX;
-        t.y += offsetY;
-    }
+/* ─── Layer List ─── */
+.layer-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
 
-function showPreview() {
-    select('#fullscreen-view').removeClass('hidden');
+.layer-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--bg-3);
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
 }
 
-function hidePreview() {
-    select('#fullscreen-view').addClass('hidden');
+.layer-item:hover {
+    border-color: var(--border-hover);
 }
 
-function saveImage() {
-    let savedOffset = offset.copy();
-    let savedZoom = zoom;
-    offset = createVector(0, 0);
-    zoom = 1.0;
-    
-    draw();
-    saveCanvas('TEXT_MOSAIC', 'png');
-    
-    offset = savedOffset;
-    zoom = savedZoom;
-    
-    updateStatus("이미지 저장됨!");
+.layer-item.active {
+    border-color: var(--text-3);
+    background: rgba(255,255,255,0.06);
 }
 
-function startRecording() {
-    if (isRecording) {
-        updateStatus("이미 녹화 중입니다");
-        return;
-    }
-    
-    if (!showPulse && !showMorph) {
-        updateStatus("PULSE 또는 MORPH 모드를 켜야 비디오 저장 가능!");
-        return;
-    }
-    
-    let duration = parseInt(document.getElementById('videoDuration').value) || 3;
-    duration = constrain(duration, 1, 30);
-    
-    let canvas = document.querySelector('#canvas-holder canvas');
-    let stream = canvas.captureStream(60);
-    
-    recordedChunks = [];
-    
-    let options = {
-        mimeType: 'video/webm;codecs=vp9',
-        videoBitsPerSecond: 20000000
-    };
-    
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        options.mimeType = 'video/webm;codecs=vp8';
-    }
-    if (!MediaRecorder.isTypeSupported(options.mimeType)) {
-        options.mimeType = 'video/webm';
-    }
-    
-    mediaRecorder = new MediaRecorder(stream, options);
-    
-    mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-            recordedChunks.push(e.data);
-        }
-    };
-    
-    mediaRecorder.onstop = () => {
-        let blob = new Blob(recordedChunks, { type: 'video/webm' });
-        let url = URL.createObjectURL(blob);
-        let a = document.createElement('a');
-        a.href = url;
-        a.download = 'TEXT_MOSAIC.webm';
-        a.click();
-        URL.revokeObjectURL(url);
-        isRecording = false;
-        select('#saveVideoBtn').html('REC');
-        updateStatus("비디오 저장됨!");
-    };
-    
-    morphProgress = 0;
-    morphDirection = 1;
-    offset = createVector(0, 0);
-    zoom = 1.0;
-    
-    mediaRecorder.start();
-    isRecording = true;
-    select('#saveVideoBtn').html('...');
-    updateStatus(duration + "초 녹화 중...");
-    
-    setTimeout(() => {
-        if (mediaRecorder && mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-        }
-    }, duration * 1000);
+.layer-item .layer-color {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
 }
 
-function updateStatus(msg) {
-    select('#info-text').html(msg);
+.layer-item .layer-name {
+    flex: 1;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-function handleImage(e) {
-    if (e.target.files.length > 0) {
-        let file = e.target.files[0];
-        let url = URL.createObjectURL(file);
-        
-        updateStatus("이미지 로딩중...");
-        
-        img = loadImage(url, () => {
-            updateStatus("이미지 준비 완료! CONVERT 클릭");
-        }, () => {
-            updateStatus("이미지 로드 실패");
-        });
-    }
+.layer-item .layer-text-preview {
+    font-size: 10px;
+    color: var(--text-3);
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
-function updateCanvas() {
-    resizeCanvas(parseInt(select('#canvasW').value()), parseInt(select('#canvasH').value()));
-    tiles1 = [];
-    tiles2 = [];
-    currentTiles = [];
-    offset = createVector(0, 0);
-    zoom = 1.0;
-    textCenterX = width / 2;
-    textCenterY = height / 2;
-    generateNoiseBuffer();
-    updateStatus("캔버스: " + width + "x" + height);
+.layer-item .layer-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
 }
 
-function mouseWheel(event) {
-    if (!select('#fullscreen-view').hasClass('hidden')) {
-        zoom -= event.delta * 0.001;
-        zoom = constrain(zoom, 0.1, 5);
-        return false;
-    }
+.layer-item:hover .layer-actions {
+    opacity: 1;
 }
 
-function mouseDragged() {
-    if (!select('#fullscreen-view').hasClass('hidden')) {
-        offset.x += (mouseX - pmouseX) / zoom;
-        offset.y += (mouseY - pmouseY) / zoom;
-    }
+.layer-btn {
+    width: 24px;
+    height: 24px;
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-3);
+    border-radius: 4px;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 12px;
+    transition: all 0.15s;
+    padding: 0;
+}
+
+.layer-btn:hover {
+    color: var(--text-1);
+    border-color: var(--border-hover);
+}
+
+.layer-btn.danger:hover {
+    color: var(--danger);
+    border-color: var(--danger);
+}
+
+.layer-vis-btn {
+    width: 24px;
+    height: 24px;
+    background: none;
+    border: none;
+    color: var(--text-2);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+    padding: 0;
+    flex-shrink: 0;
+    opacity: 0.8;
+}
+
+.layer-vis-btn.hidden-layer {
+    opacity: 0.3;
+}
+
+/* ─── Icon Button ─── */
+.icon-btn {
+    width: 28px;
+    height: 28px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    color: var(--text-2);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    transition: all 0.15s;
+    padding: 0;
+}
+
+.icon-btn:hover {
+    color: var(--text-1);
+    border-color: var(--border-hover);
+}
+
+/* ─── Form Fields ─── */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex: 1;
+    min-width: 0;
+}
+
+.field label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-3);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.field label .val {
+    color: var(--text-2);
+    font-weight: 400;
+}
+
+.row-2 {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.row-3 {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+input[type="text"],
+input[type="number"],
+textarea,
+select {
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    width: 100%;
+    min-width: 0;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+select {
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23606068' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+}
+
+textarea {
+    resize: vertical;
+    min-height: 44px;
+    font-family: var(--font-sans);
+    line-height: 1.4;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--text-3);
+}
+
+/* ─── Range Slider ─── */
+input[type="range"] {
+    width: 100%;
+    height: 28px;
+    background: transparent;
+    outline: none;
+    -webkit-appearance: none;
+    padding: 0;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 3px;
+    background: var(--bg-3);
+    border-radius: 2px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--text-1);
+    border-radius: 50%;
+    cursor: pointer;
+    margin-top: -5.5px;
+    transition: transform 0.1s;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+}
+
+input[type="range"]::-moz-range-track {
+    height: 3px;
+    background: var(--bg-3);
+    border-radius: 2px;
+    border: none;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--text-1);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+}
+
+/* ─── Toggle Group ─── */
+.toggle-group {
+    display: flex;
+    gap: 6px;
+}
+
+.toggle-btn {
+    flex: 1;
+    padding: 8px 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    color: var(--text-3);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+}
+
+.toggle-btn:hover {
+    border-color: var(--border-hover);
+    color: var(--text-2);
+}
+
+.toggle-btn.active {
+    background: var(--accent-dim);
+    color: var(--active);
+    border-color: var(--text-3);
+}
+
+/* ─── Color Input ─── */
+input[type="color"] {
+    height: 36px;
+    padding: 3px;
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    width: 100%;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 2px;
+}
+
+input[type="color"]::-webkit-color-swatch {
+    border: none;
+    border-radius: 3px;
+}
+
+/* ─── Action Buttons ─── */
+.btn-action {
+    flex: 1;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+    padding: 11px 10px;
+    text-align: center;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: all 0.15s;
+}
+
+.btn-action:hover {
+    background: var(--border-hover);
+    border-color: var(--border-hover);
+}
+
+.btn-action.primary {
+    background: var(--text-1);
+    color: var(--bg-0);
+    border-color: var(--text-1);
+    font-weight: 800;
+    font-size: 12px;
+}
+
+.btn-action.primary:hover {
+    background: #fff;
+}
+
+.rec-btn {
+    color: var(--rec);
+    border-color: rgba(255,51,68,0.3);
+}
+
+.rec-btn:hover {
+    background: rgba(255,51,68,0.1);
+    border-color: rgba(255,51,68,0.5);
+}
+
+.rec-btn.recording {
+    animation: rec-pulse 1s ease infinite;
+    background: rgba(255,51,68,0.15);
+}
+
+@keyframes rec-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.btn-sm {
+    flex: 0 0 60px;
+    background: var(--bg-3);
+    border: 1px solid var(--border);
+    color: var(--text-1);
+    padding: 10px 8px;
+    text-align: center;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-sm:hover {
+    border-color: var(--border-hover);
+}
+
+.unit-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-3);
+    padding-bottom: 12px;
+    flex-shrink: 0;
+}
+
+.upload-btn {
+    text-decoration: none;
+}
+
+/* ─── Status ─── */
+.status-msg {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-3);
+    text-align: center;
+    padding: 8px 0;
+    letter-spacing: 0.3px;
+}
+
+.safe-bottom {
+    height: env(safe-area-inset-bottom);
+    min-height: 16px;
+}
+
+input[type="file"] {
+    display: none;
+}
+
+/* ─── Animations ─── */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.layer-item {
+    animation: fadeIn 0.15s ease;
 }
