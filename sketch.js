@@ -58,7 +58,8 @@ function setup() {
     myFont = loadFont(fontURL, 
         () => { 
             isFontLoaded = true; 
-            updateStatus("준비 완료");
+            updateStatus("준비 완료 - 기본 텍스트 표시 중");
+            generateDefaultTiles();
         },
         () => { 
             updateStatus("폰트 로드 실패");
@@ -77,18 +78,43 @@ function setup() {
     // 슬라이더 값 표시
     select('#fontSize').input(() => {
         select('#fontSizeVal').html(select('#fontSize').value());
+        currentFontSize = parseInt(select('#fontSize').value());
+        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
+        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
+        normalizeTiles();
+        redraw();
     });
     select('#tileSize').input(() => {
         select('#tileSizeVal').html(select('#tileSize').value());
+        currentTileSize = parseInt(select('#tileSize').value());
+        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
+        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
+        normalizeTiles();
+        redraw();
     });
     select('#scaleX').input(() => {
         select('#scaleXVal').html(select('#scaleX').value());
+        currentScaleX = parseInt(select('#scaleX').value());
+        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
+        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
+        normalizeTiles();
+        redraw();
     });
     select('#letterSpace').input(() => {
         select('#letterSpaceVal').html(select('#letterSpace').value());
+        currentLetterSpace = parseInt(select('#letterSpace').value());
+        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
+        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
+        normalizeTiles();
+        redraw();
     });
     select('#lineHeight').input(() => {
         select('#lineHeightVal').html(select('#lineHeight').value());
+        currentLineHeight = parseInt(select('#lineHeight').value());
+        if (tiles1.length > 0) generateTextPoints(getText1(), tiles1);
+        if (tiles2.length > 0) generateTextPoints(getText2(), tiles2);
+        normalizeTiles();
+        redraw();
     });
     select('#morphDuration').input(() => {
         select('#morphDurationVal').html(select('#morphDuration').value());
@@ -99,16 +125,19 @@ function setup() {
     select('#textOffsetX').input(() => {
         select('#textOffsetXVal').html(select('#textOffsetX').value());
         textOffsetX = parseInt(select('#textOffsetX').value());
+        redraw();
     });
     select('#textOffsetY').input(() => {
         select('#textOffsetYVal').html(select('#textOffsetY').value());
         textOffsetY = parseInt(select('#textOffsetY').value());
+        redraw();
     });
     
     // 그라디언트 각도
     select('#gradAngle').input(() => {
         select('#gradAngleVal').html(select('#gradAngle').value());
         gradAngle = parseInt(select('#gradAngle').value());
+        redraw();
     });
     
     // 노이즈
@@ -116,6 +145,7 @@ function setup() {
         select('#noiseAmountVal').html(select('#noiseAmount').value());
         noiseAmount = parseInt(select('#noiseAmount').value());
         generateNoiseBuffer();
+        redraw();
     });
     
     // 그라디언트 타입 버튼
@@ -158,6 +188,26 @@ function setup() {
     });
     
     generateNoiseBuffer();
+    
+    // 텍스트 입력 실시간 반영
+    select('#textInput').input(() => {
+        if (tiles1.length > 0) {
+            generateTextPoints(getText1(), tiles1);
+            normalizeTiles();
+            redraw();
+        }
+    });
+    select('#textInput2').input(() => {
+        if (tiles2.length > 0) {
+            generateTextPoints(getText2(), tiles2);
+            normalizeTiles();
+            redraw();
+        }
+    });
+    
+    // 배경색 실시간 반영
+    select('#bgColor').input(redraw);
+    select('#bgColor2').input(redraw);
 }
 
 function toggleClass(selector, isActive) {
@@ -166,6 +216,49 @@ function toggleClass(selector, isActive) {
     } else {
         select(selector).removeClass('active');
     }
+}
+
+function getText1() {
+    return document.getElementById('textInput').value || "A";
+}
+
+function getText2() {
+    return document.getElementById('textInput2').value || "B";
+}
+
+function normalizeTiles() {
+    if (tiles1.length > 0) normalizeToCenter(tiles1);
+    if (tiles2.length > 0) normalizeToCenter(tiles2);
+    textCenterX = width / 2;
+    textCenterY = height / 2;
+    currentTiles = tiles1.map(t => ({...t}));
+}
+
+function generateDefaultTiles() {
+    currentFontSize = parseInt(select('#fontSize').value());
+    currentTileSize = parseInt(select('#tileSize').value());
+    currentScaleX = parseInt(select('#scaleX').value());
+    currentLetterSpace = parseInt(select('#letterSpace').value());
+    currentLineHeight = parseInt(select('#lineHeight').value());
+    
+    let txt1 = getText1();
+    let txt2 = getText2();
+    
+    generateTextPoints(txt1, tiles1);
+    generateTextPoints(txt2, tiles2);
+    
+    normalizeTiles();
+    
+    // 데모용 기본 이미지 생성
+    img = createGraphics(width, height);
+    img.background(50);
+    img.noStroke();
+    for (let i = 0; i < 200; i++) {
+        img.fill(random(100, 255), random(100, 255), random(200, 255));
+        img.ellipse(random(width), random(height), random(20, 80));
+    }
+    
+    updateStatus("기본 모자이크 준비됨 - 슬라이더 조정 가능");
 }
 
 function draw() {
