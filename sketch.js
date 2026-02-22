@@ -1,10 +1,10 @@
 /* ═══════════════════════════════════════
    TEXT MOSAIC v2.0 — Layer-based System
+   Pixel-sampling approach for CSS fonts
    ═══════════════════════════════════════ */
 
-let myFont;
 let img;
-let isFontLoaded = false;
+let fontReady = false;
 
 // ── Layer System ──
 let layers = [];
@@ -30,12 +30,14 @@ let recordedChunks = [];
 // Layer Class
 // ═══════════════════════════════════
 class Layer {
-    constructor(id, name) {
+    constructor(id) {
         this.id = id;
-        this.name = name;
+        this.name = 'Layer ' + (id + 1);
         this.visible = true;
         this.text = 'A';
         this.morphText = 'B';
+        this.fontFamily = 'kozuka-mincho-pr6n, serif';
+        this.fontWeight = '400';
         this.fontSize = 50;
         this.tileSize = 5;
         this.scaleX = 100;
@@ -58,6 +60,95 @@ class Layer {
 }
 
 // ═══════════════════════════════════
+// Pixel-Sampling Text Point Extraction
+// ═══════════════════════════════════
+function extractTextPoints(txt, layerSettings) {
+    let lines = txt.split('\n').filter(l => l.trim() !== '');
+    if (lines.length === 0) return [];
+
+    let fontSize = min(width, height) * (layerSettings.fontSize / 100);
+    let tilePx = max(2, min(width, height) * (layerSettings.tileSize / 100) * 0.55);
+
+    // Create offscreen canvas
+    let offCanvas = document.createElement('canvas');
+    offCanvas.width = width;
+    offCanvas.height = height;
+    let ctx = offCanvas.getContext('2d');
+    ctx.clearRect(0, 0, width, height);
+
+    // Setup font
+    let fontStr = layerSettings.fontWeight + ' ' + fontSize + 'px ' + layerSettings.fontFamily;
+    ctx.font = fontStr;
+    ctx.fillStyle = '#ffffff';
+    ctx.textBaseline = 'alphabetic';
+
+    // Calculate line positions
+    let lineHeightPx = fontSize * (layerSettings.lineHeight / 100);
+    let totalTextHeight = lines.length * lineHeightPx;
+    let startY = (height - totalTextHeight) / 2 + fontSize * 0.8;
+
+    let scaleXRatio = layerSettings.scaleX / 100;
+    let letterSpacing = layerSettings.letterSpace;
+
+    // Draw each line
+    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+        let lineTxt = lines[lineIdx];
+        let y = startY + lineIdx * lineHeightPx;
+
+        // Measure total width
+        let totalW = 0;
+        for (let c = 0; c < lineTxt.length; c++) {
+            let charW = ctx.measureText(lineTxt[c]).width * scaleXRatio;
+            totalW += charW;
+            if (c < lineTxt.length - 1) totalW += letterSpacing;
+        }
+
+        let currentX = (width - totalW) / 2;
+
+        // Draw char by char
+        for (let c = 0; c < lineTxt.length; c++) {
+            let ch = lineTxt[c];
+            let charW = ctx.measureText(ch).width;
+
+            ctx.save();
+            ctx.translate(currentX, y);
+            ctx.scale(scaleXRatio, 1);
+            ctx.fillText(ch, 0, 0);
+            ctx.restore();
+
+            currentX += charW * scaleXRatio + letterSpacing;
+        }
+    }
+
+    // Read pixels and sample points
+    let imageData = ctx.getImageData(0, 0, width, height);
+    let pixels = imageData.data;
+    let points = [];
+
+    let stepX = tilePx;
+    let stepY = tilePx;
+
+    for (let y = 0; y < height; y += stepY) {
+        for (let x = 0; x < width; x += stepX) {
+            let sx = floor(x + stepX * 0.5);
+            let sy = floor(y + stepY * 0.5);
+            if (sx >= width || sy >= height) continue;
+
+            let idx = (sy * width + sx) * 4;
+            let alpha = pixels[idx + 3];
+
+            if (alpha > 128) {
+                let jx = x + random(stepX * 0.1, stepX * 0.9);
+                let jy = y + random(stepY * 0.1, stepY * 0.9);
+                points.push({ x: jx, y: jy, index: points.length });
+            }
+        }
+    }
+
+    return points;
+}
+
+// ═══════════════════════════════════
 // Setup
 // ═══════════════════════════════════
 function setup() {
@@ -67,29 +158,38 @@ function setup() {
     canvas.parent('canvas-holder');
     offset = createVector(0, 0);
 
-    const fontURL = 'https://fonts.gstatic.com/s/roboto/v30/KFOmCnqEu92Fr1Mu4mxP.ttf';
-    myFont = loadFont(fontURL,
-        () => {
-            isFontLoaded = true;
-            updateStatus('폰트 로드 완료');
-            // Create default layer and generate demo
-            addLayer();
-            generateDemoImage();
-            generateLayerTiles(layers[0]);
-        },
-        () => updateStatus('폰트 로드 실패')
-    );
-
+    checkFontAndInit();
     bindGlobalEvents();
     bindLayerSettingsEvents();
     generateNoiseBuffer();
+}
+
+function checkFontAndInit() {
+    let checkCount = 0;
+    let checker = setInterval(() => {
+        checkCount++;
+        let tc = document.createElement('canvas');
+        let ctx = tc.getContext('2d');
+        ctx.font = '40px "kozuka-mincho-pr6n", serif';
+        let w1 = ctx.measureText('\u3042').width;
+        ctx.font = '40px serif';
+        let w2 = ctx.measureText('\u3042').width;
+
+        if (w1 !== w2 || checkCount > 50) {
+            clearInterval(checker);
+            fontReady = true;
+            updateStatus('\u6E96\u5099\u5B8C\u4E86');
+            addLayer();
+            generateDemoImage();
+            generateLayerTiles(layers[0]);
+        }
+    }, 100);
 }
 
 // ═══════════════════════════════════
 // Event Bindings
 // ═══════════════════════════════════
 function bindGlobalEvents() {
-    // Canvas / export
     select('#convertBtn').mousePressed(convertAll);
     select('#resizeBtn').mousePressed(updateCanvas);
     select('#saveBtn').mousePressed(saveImage);
@@ -97,9 +197,8 @@ function bindGlobalEvents() {
     select('#previewBtn').mousePressed(() => select('#fullscreen-view').removeClass('hidden'));
     select('#closeFullscreen').mousePressed(() => select('#fullscreen-view').addClass('hidden'));
     select('#imageInput').changed(handleImage);
-    select('#addLayerBtn').mousePressed(() => { addLayer(); });
+    select('#addLayerBtn').mousePressed(() => addLayer());
 
-    // Background controls
     select('#bgColor').input(redraw);
     select('#bgColor2').input(redraw);
     select('#gradAngle').input(() => {
@@ -117,7 +216,6 @@ function bindGlobalEvents() {
 }
 
 function bindLayerSettingsEvents() {
-    // Text inputs — live update
     select('#layerText').input(() => {
         let L = activeLayer();
         if (!L) return;
@@ -132,7 +230,24 @@ function bindLayerSettingsEvents() {
         generateLayerTiles(L);
     });
 
-    // Sliders
+    document.getElementById('layerFont').addEventListener('change', (e) => {
+        let L = activeLayer();
+        if (!L) return;
+        L.fontFamily = e.target.value;
+        generateLayerTiles(L);
+    });
+
+    document.querySelectorAll('.weight-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            let L = activeLayer();
+            if (!L) return;
+            L.fontWeight = btn.dataset.weight;
+            document.querySelectorAll('.weight-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            generateLayerTiles(L);
+        });
+    });
+
     const sliderBindings = [
         ['layerFontSize', 'layerFontSizeVal', 'fontSize', true],
         ['layerTileSize', 'layerTileSizeVal', 'tileSize', true],
@@ -156,13 +271,11 @@ function bindLayerSettingsEvents() {
         });
     }
 
-    // Blend mode
     document.getElementById('layerBlendMode').addEventListener('change', (e) => {
         let L = activeLayer();
         if (L) L.blendMode = e.target.value;
     });
 
-    // Effect toggles
     document.querySelectorAll('.effect-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             let L = activeLayer();
@@ -187,26 +300,19 @@ function activeLayer() {
 
 function addLayer() {
     let id = layers.length;
-    let L = new Layer(id, 'Layer ' + (id + 1));
-    if (id > 0) {
-        L.text = 'B';
-        L.morphText = 'A';
-    }
+    let L = new Layer(id);
+    if (id > 0) { L.text = 'B'; L.morphText = 'A'; }
     layers.push(L);
     activeLayerIdx = layers.length - 1;
     updateLayerListUI();
     loadLayerToUI(L);
-    if (isFontLoaded) generateLayerTiles(L);
+    if (fontReady) generateLayerTiles(L);
     updateStatus('레이어 ' + (id + 1) + ' 추가됨');
 }
 
 function removeLayer(idx) {
-    if (layers.length <= 1) {
-        updateStatus('최소 1개 레이어 필요');
-        return;
-    }
+    if (layers.length <= 1) { updateStatus('최소 1개 레이어 필요'); return; }
     layers.splice(idx, 1);
-    // Re-index
     for (let i = 0; i < layers.length; i++) {
         layers[i].id = i;
         layers[i].name = 'Layer ' + (i + 1);
@@ -221,7 +327,6 @@ function moveLayer(idx, dir) {
     let newIdx = idx + dir;
     if (newIdx < 0 || newIdx >= layers.length) return;
     [layers[idx], layers[newIdx]] = [layers[newIdx], layers[idx]];
-    // Re-index
     for (let i = 0; i < layers.length; i++) {
         layers[i].id = i;
         layers[i].name = 'Layer ' + (i + 1);
@@ -254,45 +359,38 @@ function updateLayerListUI() {
         let L = layers[i];
         let el = document.createElement('div');
         el.className = 'layer-item' + (i === activeLayerIdx ? ' active' : '');
-
         el.innerHTML = `
-            <button class="layer-vis-btn ${L.visible ? '' : 'hidden-layer'}" data-idx="${i}" title="표시/숨김">
-                ${L.visible ? '◉' : '○'}
+            <button class="layer-vis-btn ${L.visible ? '' : 'hidden-layer'}" data-idx="${i}">
+                ${L.visible ? '\u25C9' : '\u25CB'}
             </button>
             <span class="layer-color" style="background:${L.color}"></span>
             <span class="layer-name">${L.name}</span>
             <span class="layer-text-preview">${L.text.substring(0, 10)}</span>
             <div class="layer-actions">
-                <button class="layer-btn" data-move="${i}" data-dir="-1" title="위로">↑</button>
-                <button class="layer-btn" data-move="${i}" data-dir="1" title="아래로">↓</button>
-                <button class="layer-btn danger" data-del="${i}" title="삭제">✕</button>
+                <button class="layer-btn" data-move="${i}" data-dir="-1">\u2191</button>
+                <button class="layer-btn" data-move="${i}" data-dir="1">\u2193</button>
+                <button class="layer-btn danger" data-del="${i}">\u2715</button>
             </div>
         `;
-
-        // Select on click (but not on buttons)
         el.addEventListener('click', (e) => {
             if (e.target.closest('button')) return;
             selectLayer(i);
         });
-
         container.appendChild(el);
     }
 
-    // Bind layer action buttons
     container.querySelectorAll('.layer-vis-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             toggleLayerVisibility(parseInt(btn.dataset.idx));
         });
     });
-
     container.querySelectorAll('[data-move]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             moveLayer(parseInt(btn.dataset.move), parseInt(btn.dataset.dir));
         });
     });
-
     container.querySelectorAll('[data-del]').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -306,6 +404,7 @@ function loadLayerToUI(L) {
     select('#activeLayerTitle').html(L.name.toUpperCase());
     document.getElementById('layerText').value = L.text;
     document.getElementById('layerMorphText').value = L.morphText;
+    document.getElementById('layerFont').value = L.fontFamily;
     select('#layerFontSize').value(L.fontSize); select('#layerFontSizeVal').html(L.fontSize);
     select('#layerTileSize').value(L.tileSize); select('#layerTileSizeVal').html(L.tileSize);
     select('#layerScaleX').value(L.scaleX); select('#layerScaleXVal').html(L.scaleX);
@@ -317,73 +416,29 @@ function loadLayerToUI(L) {
     select('#layerMorphDuration').value(L.morphDuration); select('#layerMorphDurVal').html(L.morphDuration);
     document.getElementById('layerBlendMode').value = L.blendMode;
 
-    // Effect buttons
+    document.querySelectorAll('.weight-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.weight === L.fontWeight);
+    });
     document.querySelectorAll('.effect-btn').forEach(btn => {
-        let fx = btn.dataset.effect;
-        btn.classList.toggle('active', L.effects[fx]);
+        btn.classList.toggle('active', L.effects[btn.dataset.effect]);
     });
 }
 
 // ═══════════════════════════════════
 // Tile Generation
 // ═══════════════════════════════════
-function generateTextPoints(txt, targetArray, layerSettings) {
-    let lines = txt.split('\n');
-    let fontSize = min(width, height) * (layerSettings.fontSize / 100);
-    let density = map(layerSettings.tileSize, 1, 20, 0.5, 0.03);
-
-    targetArray.length = 0;
-
-    let lineHeightPx = fontSize * (layerSettings.lineHeight / 100);
-    let totalHeight = lines.length * lineHeightPx;
-    let startY = (height - totalHeight) / 2 + fontSize * 0.8;
-
-    for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-        let lineTxt = lines[lineIdx];
-        if (lineTxt.trim() === '') continue;
-
-        let chars = lineTxt.split('');
-        let totalWidth = 0;
-
-        for (let c = 0; c < chars.length; c++) {
-            if (chars[c] === ' ') {
-                totalWidth += fontSize * 0.3 * (layerSettings.scaleX / 100);
-            } else {
-                let cb = myFont.textBounds(chars[c], 0, 0, fontSize);
-                totalWidth += cb.w * (layerSettings.scaleX / 100);
-            }
-            if (c < chars.length - 1) totalWidth += layerSettings.letterSpace;
-        }
-
-        let startX = (width - totalWidth) / 2;
-        let y = startY + lineIdx * lineHeightPx;
-        let currentX = startX;
-
-        for (let c = 0; c < chars.length; c++) {
-            let ch = chars[c];
-            if (ch === ' ') {
-                currentX += fontSize * 0.3 * (layerSettings.scaleX / 100) + layerSettings.letterSpace;
-                continue;
-            }
-
-            let cb = myFont.textBounds(ch, 0, 0, fontSize);
-            let pts = myFont.textToPoints(ch, 0, 0, fontSize, {
-                sampleFactor: density,
-                simplifyThreshold: 0
-            });
-
-            for (let p of pts) {
-                let sx = p.x * (layerSettings.scaleX / 100);
-                targetArray.push({
-                    x: currentX + sx,
-                    y: y + p.y,
-                    index: targetArray.length
-                });
-            }
-
-            currentX += cb.w * (layerSettings.scaleX / 100) + layerSettings.letterSpace;
-        }
-    }
+function generateLayerTiles(L) {
+    if (!fontReady) return;
+    randomSeed(L.id * 1000 + 42);
+    L.tiles1 = extractTextPoints(L.text, L);
+    randomSeed(L.id * 1000 + 99);
+    L.tiles2 = extractTextPoints(L.morphText, L);
+    normalizeToCenter(L.tiles1);
+    normalizeToCenter(L.tiles2);
+    L.currentTiles = L.tiles1.map(t => ({ ...t }));
+    L.morphProgress = 0;
+    L.morphDirection = 1;
+    randomSeed(millis());
 }
 
 function normalizeToCenter(arr) {
@@ -398,24 +453,13 @@ function normalizeToCenter(arr) {
     for (let t of arr) { t.x += ox; t.y += oy; }
 }
 
-function generateLayerTiles(L) {
-    if (!isFontLoaded || !myFont) return;
-    generateTextPoints(L.text, L.tiles1, L);
-    generateTextPoints(L.morphText, L.tiles2, L);
-    normalizeToCenter(L.tiles1);
-    normalizeToCenter(L.tiles2);
-    L.currentTiles = L.tiles1.map(t => ({ ...t }));
-    L.morphProgress = 0;
-    L.morphDirection = 1;
-}
-
 // ═══════════════════════════════════
 // Drawing
 // ═══════════════════════════════════
 function draw() {
     drawBackground();
 
-    if (!isFontLoaded) {
+    if (!fontReady) {
         fill(255);
         textAlign(CENTER, CENTER);
         textFont('sans-serif');
@@ -429,12 +473,11 @@ function draw() {
     scale(zoom);
     translate(-width / 2 + offset.x, -height / 2 + offset.y);
 
-    // Draw each layer (bottom to top)
     for (let i = 0; i < layers.length; i++) {
         let L = layers[i];
         if (!L.visible || L.currentTiles.length === 0) continue;
 
-        // Update morph
+        // Morph update
         if (L.effects.morph && L.tiles1.length > 0 && L.tiles2.length > 0) {
             let ppf = 1 / (L.morphDuration * 60);
             L.morphProgress += L.morphDirection * ppf;
@@ -445,31 +488,16 @@ function draw() {
             L.currentTiles = L.tiles1;
         }
 
-        // Apply blend mode via drawingContext
         push();
         drawingContext.globalAlpha = L.opacity / 100;
         drawingContext.globalCompositeOperation = L.blendMode;
         translate(L.offsetX, L.offsetY);
-
         if (L.effects.web) drawWebLines(L);
         drawTiles(L);
         pop();
     }
 
     pop();
-
-    // No-image hint
-    if (!img && layers.some(l => l.currentTiles.length > 0)) {
-        // Tiles show demo image anyway
-    } else if (!img && layers.every(l => l.currentTiles.length === 0)) {
-        push();
-        fill(100);
-        textAlign(CENTER, CENTER);
-        textFont('sans-serif');
-        textSize(13);
-        text('PHOTO → CONVERT', width / 2, height / 2);
-        pop();
-    }
 }
 
 function updateMorphedTiles(L) {
@@ -486,7 +514,6 @@ function updateMorphedTiles(L) {
 
         let mx = lerp(t1.x, t2.x, eased);
         let my = lerp(t1.y, t2.y, eased);
-
         let curve = sin(eased * PI) * 15;
         let angle = atan2(t2.y - t1.y, t2.x - t1.x) + HALF_PI;
         mx += cos(angle) * curve * sin(i * 0.1);
@@ -508,9 +535,9 @@ function drawWebLines(L) {
             let t2 = tiles[j];
             let d = dist(t1.x, t1.y, t2.x, t2.y);
             if (d < maxDist) {
-                let midX = (t1.x + t2.x) / 2;
-                let midY = (t1.y + t2.y) / 2;
-                let c = getImageColor(midX, midY);
+                let mx = (t1.x + t2.x) / 2;
+                let my = (t1.y + t2.y) / 2;
+                let c = getImageColor(mx, my);
                 let a = map(d, 0, maxDist, 200, 30);
                 stroke(red(c), green(c), blue(c), a);
                 line(t1.x, t1.y, t2.x, t2.y);
@@ -529,8 +556,7 @@ function drawTiles(L) {
         let sz = baseTileSize;
 
         if (L.effects.pulse) {
-            let pulse = sin(frameCount * 0.05 + i * 0.3) * 0.3 + 1;
-            sz *= pulse;
+            sz *= sin(frameCount * 0.05 + i * 0.3) * 0.3 + 1;
         }
 
         push();
@@ -560,13 +586,9 @@ function drawBackground() {
     let c1 = color(select('#bgColor').value());
     let c2 = color(select('#bgColor2').value());
 
-    if (gradientType === 'none') {
-        background(c1);
-    } else if (gradientType === 'linear') {
-        drawLinearGradient(c1, c2);
-    } else if (gradientType === 'radial') {
-        drawRadialGradient(c1, c2);
-    }
+    if (gradientType === 'none') background(c1);
+    else if (gradientType === 'linear') drawLinearGradient(c1, c2);
+    else if (gradientType === 'radial') drawRadialGradient(c1, c2);
 
     if (noiseAmount > 0 && noiseBuffer) {
         push();
@@ -578,14 +600,12 @@ function drawBackground() {
 }
 
 function drawLinearGradient(c1, c2) {
-    push();
-    noFill();
+    push(); noFill();
     let ar = radians(gradAngle);
     let cx = width / 2, cy = height / 2;
     let diag = sqrt(width * width + height * height);
     for (let i = 0; i <= diag; i++) {
-        let t = i / diag;
-        stroke(lerpColor(c1, c2, t));
+        stroke(lerpColor(c1, c2, i / diag));
         let x1 = cx + cos(ar + HALF_PI) * diag;
         let y1 = cy + sin(ar + HALF_PI) * diag;
         let x2 = cx - cos(ar + HALF_PI) * diag;
@@ -598,8 +618,7 @@ function drawLinearGradient(c1, c2) {
 }
 
 function drawRadialGradient(c1, c2) {
-    push();
-    noStroke();
+    push(); noStroke();
     let maxR = sqrt(width * width + height * height) / 2;
     for (let r = maxR; r > 0; r -= 2) {
         fill(lerpColor(c1, c2, 1 - r / maxR));
@@ -644,7 +663,7 @@ function generateDemoImage() {
 }
 
 function convertAll() {
-    if (!isFontLoaded || !myFont) { updateStatus('폰트 로딩 중...'); return; }
+    if (!fontReady) { updateStatus('폰트 로딩 중...'); return; }
     if (!img) { updateStatus('이미지를 먼저 선택하세요'); return; }
 
     let totalTiles = 0;
@@ -652,7 +671,6 @@ function convertAll() {
         generateLayerTiles(L);
         totalTiles += L.tiles1.length;
     }
-
     offset = createVector(0, 0);
     zoom = 1.0;
     updateStatus('총 ' + totalTiles + '개 타일 (' + layers.length + '개 레이어)');
@@ -662,7 +680,8 @@ function handleImage(e) {
     if (e.target.files.length > 0) {
         let url = URL.createObjectURL(e.target.files[0]);
         updateStatus('이미지 로딩...');
-        img = loadImage(url, () => updateStatus('이미지 준비 완료 → CONVERT'),
+        img = loadImage(url,
+            () => updateStatus('이미지 준비 완료 \u2192 CONVERT'),
             () => updateStatus('이미지 로드 실패'));
     }
 }
@@ -671,9 +690,7 @@ function updateCanvas() {
     let w = parseInt(select('#canvasW').value());
     let h = parseInt(select('#canvasH').value());
     resizeCanvas(w, h);
-    for (let L of layers) {
-        L.tiles1 = []; L.tiles2 = []; L.currentTiles = [];
-    }
+    for (let L of layers) { L.tiles1 = []; L.tiles2 = []; L.currentTiles = []; }
     offset = createVector(0, 0);
     zoom = 1.0;
     generateNoiseBuffer();
@@ -686,14 +703,12 @@ function saveImage() {
     zoom = 1.0;
     draw();
     saveCanvas('TEXT_MOSAIC', 'png');
-    offset = so;
-    zoom = sz;
+    offset = so; zoom = sz;
     updateStatus('이미지 저장됨!');
 }
 
 function startRecording() {
     if (isRecording) { updateStatus('이미 녹화 중'); return; }
-
     let hasAnim = layers.some(L => L.effects.pulse || L.effects.morph);
     if (!hasAnim) { updateStatus('PULSE 또는 MORPH를 켜세요'); return; }
 
@@ -715,19 +730,18 @@ function startRecording() {
         a.download = 'TEXT_MOSAIC.webm';
         a.click();
         isRecording = false;
-        select('#saveVideoBtn').html('● REC');
+        select('#saveVideoBtn').html('\u25CF REC');
         select('#saveVideoBtn').removeClass('recording');
         updateStatus('비디오 저장됨!');
     };
 
-    // Reset morph for all layers
     for (let L of layers) { L.morphProgress = 0; L.morphDirection = 1; }
     offset = createVector(0, 0);
     zoom = 1.0;
 
     mediaRecorder.start();
     isRecording = true;
-    select('#saveVideoBtn').html('● REC...');
+    select('#saveVideoBtn').html('\u25CF REC...');
     select('#saveVideoBtn').addClass('recording');
     updateStatus(dur + '초 녹화 중...');
 
@@ -741,7 +755,7 @@ function updateStatus(msg) {
 }
 
 // ═══════════════════════════════════
-// Interaction (preview pan/zoom)
+// Interaction
 // ═══════════════════════════════════
 function mouseWheel(event) {
     if (!select('#fullscreen-view').hasClass('hidden')) {
