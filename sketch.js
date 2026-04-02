@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════
-   TEXT MOSAIC v3.0 — Main Entry
+   TEXT MOSAIC v3.2 — Main Entry
    p5.js setup() / draw() + globals
    ═══════════════════════════════════ */
 
@@ -23,7 +23,8 @@ function setup() {
     canvas.parent('canvas-wrap');
     offset = createVector(0, 0);
 
-    pixelDensity(1); // Consistent rendering across devices
+    // Use 1x for live preview (performance), export will temporarily bump to devicePixelRatio
+    pixelDensity(1);
 
     checkFontAndInit();
     bindGlobalEvents();
@@ -59,13 +60,12 @@ function checkFontAndInit() {
 
 // ── p5.js Draw Loop ──
 function draw() {
-    if (isExporting) return; // Don't interfere with export
+    if (isExporting) return;
     drawFrame(frameCount);
 }
 
 // ── Mouse Interaction (Desktop) ──
 function mouseWheel(event) {
-    // Zoom on canvas area or fullscreen
     let fsView = document.getElementById('fullscreen-view');
     let canvasArea = document.getElementById('canvas-area');
     let target = event.target;
@@ -86,7 +86,17 @@ function mouseDragged() {
     let inCanvas = canvasArea && canvasArea.matches(':hover');
 
     if (inFS || inCanvas) {
-        offset.x += (mouseX - pmouseX) / zoom;
-        offset.y += (mouseY - pmouseY) / zoom;
+        // Convert mouse delta to canvas-local space
+        let cnv = document.querySelector('#canvas-wrap canvas') ||
+                  document.querySelector('#fullscreen-canvas-holder canvas');
+        if (cnv) {
+            let scaleX = width / cnv.clientWidth;
+            let scaleY = height / cnv.clientHeight;
+            offset.x += ((mouseX - pmouseX) * scaleX) / zoom;
+            offset.y += ((mouseY - pmouseY) * scaleY) / zoom;
+        } else {
+            offset.x += (mouseX - pmouseX) / zoom;
+            offset.y += (mouseY - pmouseY) / zoom;
+        }
     }
 }

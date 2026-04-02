@@ -202,6 +202,7 @@ function generateLayerTiles(L) {
     L.currentTiles = L.tiles1.map(t => ({ ...t }));
     L.morphProgress = 0;
     L.morphDirection = 1;
-    L._nearestMap = null; // invalidate morph cache
+    L._nearestMap = null;
+    L._morphPairs = null; // invalidate spatial morph cache
     randomSeed(millis());
 }

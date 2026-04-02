@@ -1,17 +1,39 @@
 /* ═══════════════════════════════════
-   Touch Gestures & Keyboard Shortcuts
+   Touch Gestures & Keyboard Shortcuts v3.2
+   Proper canvas-local coordinate mapping
    ═══════════════════════════════════ */
 
-// ── Touch: Pinch-to-Zoom & Drag ──
 let touchStartDist = 0;
 let touchStartZoom = 1;
 let lastTouchX = 0, lastTouchY = 0;
 let isTouching = false;
 
+// Convert page coordinates to canvas-local delta
+// Accounts for canvas position on screen and CSS scaling
+function canvasDelta(dx, dy, element) {
+    let rect = element.getBoundingClientRect();
+    let cnv = element.querySelector('canvas');
+    if (!cnv) return { dx: dx / zoom, dy: dy / zoom };
+
+    // CSS display size vs actual canvas size
+    let scaleX = width / cnv.clientWidth;
+    let scaleY = height / cnv.clientHeight;
+
+    return {
+        dx: (dx * scaleX) / zoom,
+        dy: (dy * scaleY) / zoom
+    };
+}
+
 function initTouchHandlers() {
-    let area = document.getElementById('canvas-area');
+    setupTouchForElement(document.getElementById('canvas-area'));
+    setupTouchForElement(document.getElementById('fullscreen-canvas-holder'));
+}
 
-    area.addEventListener('touchstart', (e) => {
+function setupTouchForElement(el) {
+    if (!el) return;
+
+    el.addEventListener('touchstart', (e) => {
         if (e.touches.length === 2) {
             e.preventDefault();
             let dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -25,7 +47,7 @@ function initTouchHandlers() {
         }
     }, { passive: false });
 
-    area.addEventListener('touchmove', (e) => {
+    el.addEventListener('touchmove', (e) => {
         if (e.touches.length === 2) {
             e.preventDefault();
             let dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -36,62 +58,30 @@ function initTouchHandlers() {
             e.preventDefault();
             let tx = e.touches[0].clientX;
             let ty = e.touches[0].clientY;
-            offset.x += (tx - lastTouchX) / zoom;
-            offset.y += (ty - lastTouchY) / zoom;
+            let rawDx = tx - lastTouchX;
+            let rawDy = ty - lastTouchY;
+
+            // Convert to canvas-local coordinates
+            let d = canvasDelta(rawDx, rawDy, el);
+            offset.x += d.dx;
+            offset.y += d.dy;
+
             lastTouchX = tx;
             lastTouchY = ty;
         }
     }, { passive: false });
 
-    area.addEventListener('touchend', () => { isTouching = false; });
-
-    // Also handle touch in fullscreen
-    let fsHolder = document.getElementById('fullscreen-canvas-holder');
-    fsHolder.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 2) {
-            e.preventDefault();
-            let dx = e.touches[0].clientX - e.touches[1].clientX;
-            let dy = e.touches[0].clientY - e.touches[1].clientY;
-            touchStartDist = Math.sqrt(dx * dx + dy * dy);
-            touchStartZoom = zoom;
-        } else if (e.touches.length === 1) {
-            isTouching = true;
-            lastTouchX = e.touches[0].clientX;
-            lastTouchY = e.touches[0].clientY;
-        }
-    }, { passive: false });
-
-    fsHolder.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2) {
-            e.preventDefault();
-            let dx = e.touches[0].clientX - e.touches[1].clientX;
-            let dy = e.touches[0].clientY - e.touches[1].clientY;
-            let dist = Math.sqrt(dx * dx + dy * dy);
-            zoom = constrain(touchStartZoom * (dist / touchStartDist), 0.1, 5);
-        } else if (e.touches.length === 1 && isTouching) {
-            e.preventDefault();
-            let tx = e.touches[0].clientX;
-            let ty = e.touches[0].clientY;
-            offset.x += (tx - lastTouchX) / zoom;
-            offset.y += (ty - lastTouchY) / zoom;
-            lastTouchX = tx;
-            lastTouchY = ty;
-        }
-    }, { passive: false });
-
-    fsHolder.addEventListener('touchend', () => { isTouching = false; });
+    el.addEventListener('touchend', () => { isTouching = false; });
 }
 
 // ── Keyboard Shortcuts ──
 
 function initKeyboardShortcuts() {
     document.addEventListener('keydown', (e) => {
-        // Don't trigger when typing in inputs
         let tag = e.target.tagName;
         let isInput = (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT');
 
         if (e.key === 'Escape') {
-            // Close any modal
             let fsView = document.getElementById('fullscreen-view');
             if (!fsView.classList.contains('hidden')) { exitFullscreen(); return; }
             let sm = document.getElementById('shortcutModal');
@@ -100,39 +90,25 @@ function initKeyboardShortcuts() {
 
         if (isInput) return;
 
-        // Ctrl+Enter → Convert
         if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            convertAll();
-            return;
+            e.preventDefault(); convertAll(); return;
         }
-
-        // Ctrl+S → Save
         if (e.key === 's' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            saveImage();
-            return;
+            e.preventDefault(); saveImage(); return;
         }
-
-        // F → Fullscreen
         if (e.key === 'f' || e.key === 'F') {
             let fsView = document.getElementById('fullscreen-view');
             if (fsView.classList.contains('hidden')) enterFullscreen();
             else exitFullscreen();
             return;
         }
-
-        // V → Toggle visibility
         if (e.key === 'v' || e.key === 'V') {
-            toggleLayerVisibility(activeLayerIdx);
-            return;
+            toggleLayerVisibility(activeLayerIdx); return;
         }
 
-        // 1-9 → Select layer
         let num = parseInt(e.key);
         if (num >= 1 && num <= 9 && num <= layers.length) {
-            selectLayer(num - 1);
-            return;
+            selectLayer(num - 1); return;
         }
     });
 }

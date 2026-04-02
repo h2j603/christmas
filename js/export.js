@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════
-   Export: Image & Frame-by-Frame Video
+   Export v3.2
+   Image save & frame-perfect video
    ═══════════════════════════════════ */
 
 let isExporting = false;
@@ -8,21 +9,34 @@ function saveImage() {
     let so = offset.copy(), sz = zoom;
     offset = createVector(0, 0);
     zoom = 1.0;
+
+    // Temporarily use device pixel density for sharp export
+    let oldPD = pixelDensity();
+    pixelDensity(window.devicePixelRatio || 1);
+    resizeCanvas(width, height); // force buffer rebuild at new density
     drawFrame(frameCount);
     saveCanvas('TEXT_MOSAIC', 'png');
+    pixelDensity(1);
+    resizeCanvas(width, height);
+
     offset = so; zoom = sz;
     updateStatus('이미지 저장됨!', 'success');
 }
 
-// ── High-Quality Frame-by-Frame Video Export ──
-// Uses captureStream(0) + requestFrame() for perfect frame capture
-// No dropped frames, full resolution, high bitrate
+// ═══════════════════════════════════
+// Frame-Perfect Video Export
+//
+// Key: We render frames at our own pace using a simple counter,
+// NOT tied to requestAnimationFrame timing. Each frame is drawn,
+// then explicitly signaled to the recorder via requestFrame().
+// This guarantees every frame is captured at exact intervals.
+// ═══════════════════════════════════
 
 async function exportVideo() {
     if (isExporting) return;
 
-    let hasAnim = layers.some(L => L.effects.pulse || L.effects.morph || L.effects.wave);
-    if (!hasAnim) { updateStatus('PULSE, MORPH, 또는 WAVE를 켜세요', 'error'); return; }
+    let hasAnim = layers.some(L => L.effects.pulse || L.effects.morph || L.effects.wave || L.effects.vortex || L.effects.rotate3d);
+    if (!hasAnim) { updateStatus('애니메이션 이펙트를 켜세요', 'error'); return; }
 
     let dur = constrain(parseInt(document.getElementById('videoDuration').value) || 3, 1, 30);
     let fps = 60;
@@ -43,32 +57,26 @@ async function exportVideo() {
     offset = createVector(0, 0);
     zoom = 1.0;
 
-    // Reset animations
+    // Reset all animations to start
     for (let L of layers) {
         L.morphProgress = 0;
         L.morphDirection = 1;
     }
 
-    // Get canvas element
     let cnv = document.querySelector('#canvas-wrap canvas');
+    if (!cnv) {
+        cnv = document.querySelector('#fullscreen-canvas-holder canvas');
+    }
     if (!cnv) { finishExport(savedOffset, savedZoom, btn, progBar); return; }
 
     // Setup high-quality recording
-    let stream = cnv.captureStream(0);
+    let stream = cnv.captureStream(0); // 0 = manual frame control
     let track = stream.getVideoTracks()[0];
     let chunks = [];
 
-    // Try highest quality codec
-    let opts = { videoBitsPerSecond: 40000000 }; // 40 Mbps
-    for (let mime of [
-        'video/webm;codecs=vp9',
-        'video/webm;codecs=vp8',
-        'video/webm'
-    ]) {
-        if (MediaRecorder.isTypeSupported(mime)) {
-            opts.mimeType = mime;
-            break;
-        }
+    let opts = { videoBitsPerSecond: 40000000 };
+    for (let mime of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
+        if (MediaRecorder.isTypeSupported(mime)) { opts.mimeType = mime; break; }
     }
 
     let recorder = new MediaRecorder(stream, opts);
@@ -87,9 +95,11 @@ async function exportVideo() {
         updateStatus(dur + '초 영상 내보내기 완료!', 'success');
     };
 
+    // Wait a tick for recorder to be ready
+    await new Promise(r => setTimeout(r, 50));
     recorder.start();
 
-    // Render frame by frame
+    // Render each frame on our own schedule
     let frame = 0;
 
     function renderNext() {
@@ -98,7 +108,8 @@ async function exportVideo() {
             return;
         }
 
-        // Update morph/animation for this frame
+        // Advance morph/animation state deterministically
+        // Each frame = exactly 1/fps of a second, regardless of wall-clock time
         for (let L of layers) {
             if (L.effects.morph && L.tiles1.length > 0 && L.tiles2.length > 0) {
                 let ppf = 1 / (L.morphDuration * fps);
@@ -109,25 +120,36 @@ async function exportVideo() {
             }
         }
 
-        // Render this frame
-        drawFrame(frame);
+        // Draw this frame (use our own frame counter, not p5's frameCount)
+        drawBackground();
+        if (fontReady) {
+            push();
+            translate(width / 2, height / 2);
+            scale(zoom);
+            translate(-width / 2 + offset.x, -height / 2 + offset.y);
+            drawLayers(frame);
+            pop();
+        }
 
         // Signal frame to recorder
-        if (track && track.requestFrame) {
+        if (track.requestFrame) {
             track.requestFrame();
         }
 
         frame++;
         let pct = Math.round((frame / totalFrames) * 100);
         progFill.style.width = pct + '%';
-        updateStatus('내보내기 ' + pct + '%...');
 
-        // Use rAF for smooth progress UI updates
+        // Update UI ~10x per second (not every frame)
+        if (frame % 6 === 0) {
+            updateStatus('내보내기 ' + pct + '%...');
+        }
+
+        // Use rAF to yield to browser for UI updates, but WE control frame counting
         requestAnimationFrame(renderNext);
     }
 
-    // Small delay to ensure recorder is ready
-    setTimeout(() => requestAnimationFrame(renderNext), 100);
+    requestAnimationFrame(renderNext);
 }
 
 function finishExport(savedOffset, savedZoom, btn, progBar) {
@@ -139,7 +161,7 @@ function finishExport(savedOffset, savedZoom, btn, progBar) {
     progBar.classList.add('hidden');
 }
 
-// ── Draw a single frame (used by both live draw and export) ──
+// ── Draw a single frame (used by live draw loop) ──
 function drawFrame(frameNum) {
     drawBackground();
     if (!fontReady) return;
@@ -156,7 +178,6 @@ function generateDemoImage() {
     img = createGraphics(width, height);
     img.background(30);
     img.noStroke();
-    // Rich gradient demo
     for (let y = 0; y < height; y += 4) {
         for (let x = 0; x < width; x += 4) {
             let r = map(x, 0, width, 60, 220);
@@ -166,7 +187,6 @@ function generateDemoImage() {
             img.rect(x, y, 4, 4);
         }
     }
-    // Add some circles for variation
     for (let i = 0; i < 30; i++) {
         img.fill(random(150, 255), random(100, 255), random(180, 255), 120);
         img.ellipse(random(width), random(height), random(30, 100));
