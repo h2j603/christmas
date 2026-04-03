@@ -99,26 +99,28 @@ function extractFillPoints(px, w, h, tilePx) {
 // ── OUTLINE mode: Sobel-like edge detection ──
 function extractOutlinePoints(px, w, h, tilePx) {
     let points = [];
-    let step = max(2, floor(tilePx * 0.6));
+    let step = max(3, floor(tilePx * 0.7));
+    // Sobel sample offset: at least 1px, scales with step for large tiles
+    let sOff = max(1, floor(step * 0.4));
 
-    for (let y = 1; y < h - 1; y += step) {
-        for (let x = 1; x < w - 1; x += step) {
-            // Sobel gradient approximation
-            let aL  = px[(y * w + (x - 1)) * 4 + 3];
-            let aR  = px[(y * w + (x + 1)) * 4 + 3];
-            let aU  = px[((y - 1) * w + x) * 4 + 3];
-            let aD  = px[((y + 1) * w + x) * 4 + 3];
-            let aUL = px[((y - 1) * w + (x - 1)) * 4 + 3];
-            let aUR = px[((y - 1) * w + (x + 1)) * 4 + 3];
-            let aDL = px[((y + 1) * w + (x - 1)) * 4 + 3];
-            let aDR = px[((y + 1) * w + (x + 1)) * 4 + 3];
+    for (let y = sOff; y < h - sOff; y += step) {
+        for (let x = sOff; x < w - sOff; x += step) {
+            // Sobel gradient using scaled offset for consistent detection
+            let aL  = px[(y * w + (x - sOff)) * 4 + 3] || 0;
+            let aR  = px[(y * w + (x + sOff)) * 4 + 3] || 0;
+            let aU  = px[((y - sOff) * w + x) * 4 + 3] || 0;
+            let aD  = px[((y + sOff) * w + x) * 4 + 3] || 0;
+            let aUL = px[((y - sOff) * w + (x - sOff)) * 4 + 3] || 0;
+            let aUR = px[((y - sOff) * w + (x + sOff)) * 4 + 3] || 0;
+            let aDL = px[((y + sOff) * w + (x - sOff)) * 4 + 3] || 0;
+            let aDR = px[((y + sOff) * w + (x + sOff)) * 4 + 3] || 0;
 
             let gx = (-aUL + aUR - 2 * aL + 2 * aR - aDL + aDR);
             let gy = (-aUL - 2 * aU - aUR + aDL + 2 * aD + aDR);
             let mag = sqrt(gx * gx + gy * gy);
 
-            if (mag > 200) {
-                let jitter = step * 0.2;
+            if (mag > 150) {
+                let jitter = step * 0.25;
                 points.push({
                     x: x + random(-jitter, jitter),
                     y: y + random(-jitter, jitter),

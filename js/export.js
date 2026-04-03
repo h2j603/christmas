@@ -65,12 +65,14 @@ function saveTransparentImage() {
 async function exportVideo() {
     if (isExporting) return;
 
-    let hasAnim = layers.some(L => L.effects.pulse || L.effects.morph || L.effects.wave || L.effects.vortex || L.effects.rotate3d);
+    let hasAnim = layers.some(L => L.effects.pulse || L.effects.morph || L.effects.wave || L.effects.vortex || L.effects.rotate3d || L.effects.scatter || L.effects.sequencer || L.effects.spring);
     if (!hasAnim) { updateStatus('애니메이션 이펙트를 켜세요', 'error'); return; }
 
     let dur = constrain(parseInt(document.getElementById('videoDuration').value) || 3, 1, 30);
+    let loops = constrain(parseInt(document.getElementById('videoLoops').value) || 1, 1, 20);
     let fps = 60;
-    let totalFrames = fps * dur;
+    let framesPerLoop = fps * dur;
+    let totalFrames = framesPerLoop * loops;
 
     isExporting = true;
     let btn = document.getElementById('exportVideoBtn');
@@ -140,7 +142,8 @@ async function exportVideo() {
         document.body.removeChild(a);
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
         finishExport(savedOffset, savedZoom, btn, progBar);
-        updateStatus(dur + '초 영상 내보내기 완료!', 'success');
+        let loopMsg = loops > 1 ? ' (' + loops + '회 루프)' : '';
+        updateStatus(dur + '초' + loopMsg + ' 영상 내보내기 완료!', 'success');
     };
 
     await new Promise(r => setTimeout(r, 50));
@@ -161,8 +164,18 @@ async function exportVideo() {
             return;
         }
 
+        // Reset animations at the start of each loop
+        if (loops > 1 && frame > 0 && (frame % framesPerLoop) === 0) {
+            for (let L of layers) {
+                L.morphProgress = 0;
+                L.morphDirection = 1;
+                if (L.effects.scatter) { L.scatterProgress = 1; L.scatterDirection = -1; }
+                if (L.effects.sequencer) { L.sequencerProgress = 0; }
+                if (L.effects.spring) { L._springState = null; }
+            }
+        }
+
         // Advance morph/animation state deterministically
-        // Each frame = exactly 1/fps of a second, regardless of wall-clock time
         for (let L of layers) {
             if (L.effects.morph && L.tiles1.length > 0 && L.tiles2.length > 0) {
                 let ppf = 1 / (L.morphDuration * fps);
