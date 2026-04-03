@@ -889,7 +889,7 @@ kbd {
     textarea,
     select {
         padding: 7px 8px;
-        font-size: 11px;
+        font-size: 16px; /* ≥16px prevents iOS auto-zoom on focus */
     }
 
     textarea { min-height: 34px; }
