@@ -83,7 +83,7 @@ function fitCanvasToPreview() {
 
 // ── p5.js Draw Loop ──
 function draw() {
-    if (isExporting) return;
+    if (isExporting === true) return; // skip draw only for old frame-by-frame mode
     drawFrame(frameCount);
 }
 

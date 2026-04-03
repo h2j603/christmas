@@ -1,9 +1,11 @@
 /* ═══════════════════════════════════
-   Export v3.2
-   Image save & frame-perfect video
+   Export v4 — Real-time Recording
+   No frame-by-frame capture.
+   Let draw() run normally, record the stream.
    ═══════════════════════════════════ */
 
 let isExporting = false;
+let exportTimer = null;
 
 function getExportScale() {
     let active = document.querySelector('.export-scale-btn.active');
@@ -16,33 +18,28 @@ function saveImage() {
     zoom = 1.0;
 
     let expScale = getExportScale();
-    let oldPD = pixelDensity();
     pixelDensity(expScale);
     resizeCanvas(width, height);
     drawFrame(frameCount);
-    saveCanvas('TEXT_MOSAIC_' + width*expScale + 'x' + height*expScale, 'png');
+    saveCanvas('TEXT_MOSAIC_' + width * expScale + 'x' + height * expScale, 'png');
     pixelDensity(1);
     resizeCanvas(width, height);
 
     offset = so; zoom = sz;
+    fitCanvasToPreview();
     updateStatus('이미지 저장됨!', 'success');
 }
 
-// ── Transparent Background PNG ──
 function saveTransparentImage() {
     let so = offset.copy(), sz = zoom;
     offset = createVector(0, 0);
     zoom = 1.0;
 
     let expScale = getExportScale();
-    let oldPD = pixelDensity();
     pixelDensity(expScale);
     resizeCanvas(width, height);
-
-    // Clear to transparent (not background color)
     clear();
 
-    // Draw only tiles, no background
     if (fontReady) {
         push();
         translate(width / 2, height / 2);
@@ -53,84 +50,86 @@ function saveTransparentImage() {
     }
 
     saveCanvas('TEXT_MOSAIC_TRANSPARENT', 'png');
-
     pixelDensity(1);
     resizeCanvas(width, height);
     offset = so; zoom = sz;
+    fitCanvasToPreview();
     updateStatus('투명 배경 PNG 저장됨!', 'success');
 }
 
 // ═══════════════════════════════════
-// Frame-Perfect Video Export
+// Real-Time Video Recording
 //
-// Key: We render frames at our own pace using a simple counter,
-// NOT tied to requestAnimationFrame timing. Each frame is drawn,
-// then explicitly signaled to the recorder via requestFrame().
-// This guarantees every frame is captured at exact intervals.
+// Instead of frame-by-frame capture (which causes timing issues),
+// we let p5's draw() loop run at its natural speed and record
+// the canvas stream in real-time. This guarantees smooth playback
+// because MediaRecorder captures at consistent intervals.
+//
+// For hi-res: temporarily increase pixelDensity before recording.
+// Trade-off: export takes as long as the video duration (real-time).
 // ═══════════════════════════════════
 
 async function exportVideo() {
     if (isExporting) return;
 
-    let hasAnim = layers.some(L => L.effects.pulse || L.effects.morph || L.effects.wave || L.effects.vortex || L.effects.rotate3d || L.effects.scatter || L.effects.sequencer || L.effects.spring);
+    let hasAnim = layers.some(L =>
+        L.effects.pulse || L.effects.morph || L.effects.wave ||
+        L.effects.vortex || L.effects.rotate3d || L.effects.scatter ||
+        L.effects.sequencer || L.effects.spring);
     if (!hasAnim) { updateStatus('애니메이션 이펙트를 켜세요', 'error'); return; }
 
     let dur = constrain(parseInt(document.getElementById('videoDuration').value) || 3, 1, 30);
     let loops = constrain(parseInt(document.getElementById('videoLoops').value) || 1, 1, 20);
-    // Use 30fps for export — half the frames, double the animation step per frame
-    // This gives encoder 2x more time per frame and produces smoother playback
-    let fps = 30;
-    let animStepsPerFrame = 2; // advance animation by 2 ticks per rendered frame (equivalent to 60fps motion)
-    let framesPerLoop = fps * dur;
-    let totalFrames = framesPerLoop * loops;
+    let totalDur = dur * loops;
 
     isExporting = true;
     let btn = document.getElementById('exportVideoBtn');
     btn.classList.add('exporting');
-    btn.textContent = 'EXPORTING...';
 
     let progBar = document.getElementById('exportProgress');
     let progFill = document.getElementById('exportProgressFill');
     progBar.classList.remove('hidden');
 
-    // Apply export scale — temporarily upscale canvas for hi-res video
     let expScale = getExportScale();
     let origW = width;
     let origH = height;
 
-    // Save state
+    // Save state & reset
     let savedOffset = offset.copy();
     let savedZoom = zoom;
     offset = createVector(0, 0);
     zoom = 1.0;
 
-    // Upscale canvas if needed
+    // Reset all animations
+    for (let L of layers) {
+        L.morphProgress = 0;
+        L.morphDirection = 1;
+        L.morphHolding = false;
+        L.morphHoldTimer = 0;
+        L.morphStepIdx = 0;
+        L._morphPairs = null;
+        if (L.effects.scatter) { L.scatterProgress = 1; L.scatterDirection = -1; }
+        if (L.effects.sequencer) { L.sequencerProgress = 0; }
+        if (L.effects.spring) { L._springState = null; }
+    }
+
+    // Upscale for hi-res
     if (expScale > 1) {
         pixelDensity(expScale);
         resizeCanvas(origW, origH);
-        // Regenerate buffers at new density
         generateNoiseBuffer();
         markGradientDirty();
         _imgPixelsLoaded = false;
     }
 
-    // Reset all animations to start
-    for (let L of layers) {
-        L.morphProgress = 0;
-        L.morphDirection = 1;
-    }
-
-    let cnv = document.querySelector('#canvas-wrap canvas');
-    if (!cnv) {
-        cnv = document.querySelector('#fullscreen-canvas-holder canvas');
-    }
+    let cnv = document.querySelector('#canvas-wrap canvas') ||
+              document.querySelector('#fullscreen-canvas-holder canvas');
     if (!cnv) { finishExport(savedOffset, savedZoom, btn, progBar, expScale); return; }
 
-    // Setup high-quality recording (wrapped in try-catch to prevent stuck state)
-    let stream, track, recorder;
+    // Use captureStream with auto fps (browser handles timing)
+    let stream, recorder;
     try {
-        stream = cnv.captureStream(0);
-        track = stream.getVideoTracks()[0];
+        stream = cnv.captureStream(30);
     } catch (e) {
         finishExport(savedOffset, savedZoom, btn, progBar, expScale);
         updateStatus('캡처 스트림 생성 실패', 'error');
@@ -138,7 +137,6 @@ async function exportVideo() {
     }
 
     let chunks = [];
-    // Scale bitrate with resolution: 40Mbps at 1x, 80 at 2x, 160 at 4x
     let opts = { videoBitsPerSecond: 40000000 * expScale };
     for (let mime of ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']) {
         if (MediaRecorder.isTypeSupported(mime)) { opts.mimeType = mime; break; }
@@ -170,32 +168,32 @@ async function exportVideo() {
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
         finishExport(savedOffset, savedZoom, btn, progBar, expScale);
         let loopMsg = loops > 1 ? ' (' + loops + '회 루프)' : '';
-        updateStatus(dur + '초' + loopMsg + ' 영상 내보내기 완료!', 'success');
+        updateStatus(totalDur + '초' + loopMsg + ' 영상 내보내기 완료!', 'success');
     };
 
-    await new Promise(r => setTimeout(r, 50));
-    try {
-        recorder.start();
-    } catch (e) {
-        finishExport(savedOffset, savedZoom, btn, progBar, expScale);
-        updateStatus('녹화 시작 실패', 'error');
-        return;
-    }
+    // Let draw() run — it's NOT blocked by isExporting anymore during recording
+    isExporting = 'recording'; // special state: draw() runs but user can't trigger another export
 
-    // Render each frame with guaranteed encode time
-    // Key: use setTimeout between frames to let encoder process each frame
-    // This prevents frame drops from encoder backpressure
-    let frame = 0;
-    let encodeDelay = 1000 / fps; // ~16ms per frame at 60fps
+    recorder.start();
+    updateStatus('실시간 녹화 중... ' + totalDur + '초');
 
-    function renderNext() {
-        if (frame >= totalFrames) {
-            recorder.stop();
-            return;
-        }
+    // Progress timer
+    let startTime = Date.now();
+    let progressInterval = setInterval(() => {
+        let elapsed = (Date.now() - startTime) / 1000;
+        let pct = Math.min(100, Math.round((elapsed / totalDur) * 100));
+        progFill.style.width = pct + '%';
+        btn.textContent = Math.ceil(totalDur - elapsed) + '초 남음';
+    }, 200);
 
-        // Reset animations at the start of each loop
-        if (loops > 1 && frame > 0 && (frame % framesPerLoop) === 0) {
+    // Handle loop resets during recording
+    let loopInterval = null;
+    if (loops > 1) {
+        let loopCount = 0;
+        loopInterval = setInterval(() => {
+            loopCount++;
+            if (loopCount >= loops) { clearInterval(loopInterval); return; }
+            // Reset animations for next loop
             for (let L of layers) {
                 L.morphProgress = 0;
                 L.morphDirection = 1;
@@ -207,99 +205,22 @@ async function exportVideo() {
                 if (L.effects.sequencer) { L.sequencerProgress = 0; }
                 if (L.effects.spring) { L._springState = null; }
             }
-        }
-
-        // Advance animation by multiple ticks per frame (30fps render, 60fps motion)
-        // Advance animation N ticks (30fps render with 60fps-equivalent motion)
-        let motionFps = 60; // always 60 for consistent motion speed
-        for (let step = 0; step < animStepsPerFrame; step++) {
-            for (let L of layers) {
-                if (L.effects.morph && L.morphSteps && L.morphSteps.length > 1) {
-                    if (L.morphHolding) {
-                        L.morphHoldTimer -= 1/motionFps;
-                        if (L.morphHoldTimer <= 0) {
-                            L.morphHolding = false;
-                            L.morphProgress = 0;
-                            L.morphStepIdx++;
-                            if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
-                            L._morphPairs = null;
-                        }
-                    } else {
-                        let ppf = 1 / (L.morphDuration * motionFps);
-                        L.morphProgress += ppf;
-                        if (L.morphProgress >= 1) {
-                            L.morphProgress = 1;
-                            if (L.morphHold > 0) {
-                                L.morphHolding = true;
-                                L.morphHoldTimer = L.morphHold;
-                            } else {
-                                L.morphProgress = 0;
-                                L.morphStepIdx++;
-                                if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
-                                L._morphPairs = null;
-                            }
-                        }
-                    }
-                    let fromIdx = L.morphStepIdx;
-                    let toIdx = (L.morphStepIdx + 1) % L.morphSteps.length;
-                    L.tiles1 = L.morphSteps[fromIdx];
-                    L.tiles2 = L.morphSteps[toIdx];
-                    if (!L._morphPairs) L._morphPairs = buildSpatialMorphMap(L.tiles1, L.tiles2);
-                    updateMorphedTiles(L);
-                }
-                if (L.effects.scatter) {
-                    let spd = 1 / (L.morphDuration * motionFps);
-                    L.scatterProgress += L.scatterDirection * spd;
-                    if (L.scatterProgress >= 1) { L.scatterProgress = 1; L.scatterDirection = -1; }
-                    else if (L.scatterProgress <= 0) { L.scatterProgress = 0; L.scatterDirection = 1; }
-                }
-                if (L.effects.sequencer) {
-                    L.sequencerProgress += 1 / (L.morphDuration * motionFps * 2);
-                    if (L.sequencerProgress > 1.5) L.sequencerProgress = 0;
-                }
-            }
-        }
-
-        // Draw this frame and measure render time
-        let renderStart = performance.now();
-        drawBackground();
-        if (fontReady) {
-            push();
-            translate(width / 2, height / 2);
-            scale(zoom);
-            translate(-width / 2 + offset.x, -height / 2 + offset.y);
-            drawLayers(frame);
-            pop();
-        }
-        let renderTime = performance.now() - renderStart;
-
-        // Wait for paint to flush to canvas, THEN signal frame to recorder
-        // rAF guarantees the canvas buffer is ready for capture
-        requestAnimationFrame(() => {
-            if (track && track.requestFrame) {
-                track.requestFrame();
-            }
-
-            frame++;
-            let pct = Math.round((frame / totalFrames) * 100);
-            progFill.style.width = pct + '%';
-            if (frame % 6 === 0) updateStatus('내보내기 ' + pct + '%...');
-
-            // Dynamic delay: at least 20ms, or 2x render time (whichever is larger)
-            // This ensures encoder has enough time even with heavy frames
-            let delay = Math.max(20, renderTime * 2);
-            setTimeout(renderNext, delay);
-        });
+        }, dur * 1000);
     }
 
-    setTimeout(renderNext, 100);
+    // Stop after total duration
+    exportTimer = setTimeout(() => {
+        clearInterval(progressInterval);
+        if (loopInterval) clearInterval(loopInterval);
+        if (recorder.state === 'recording') recorder.stop();
+    }, totalDur * 1000);
 }
 
 function finishExport(savedOffset, savedZoom, btn, progBar, restoreScale) {
     isExporting = false;
+    if (exportTimer) { clearTimeout(exportTimer); exportTimer = null; }
     offset = savedOffset;
     zoom = savedZoom;
-    // Restore canvas to 1x density
     if (restoreScale && restoreScale > 1) {
         pixelDensity(1);
         resizeCanvas(width, height);
@@ -309,7 +230,7 @@ function finishExport(savedOffset, savedZoom, btn, progBar, restoreScale) {
         fitCanvasToPreview();
     }
     btn.classList.remove('exporting');
-    btn.textContent = 'EXPORT VIDEO';
+    btn.textContent = 'VIDEO';
     progBar.classList.add('hidden');
 }
 
