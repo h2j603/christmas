@@ -60,29 +60,35 @@ function extractTextPoints(txt, L) {
     return extractFillPoints(px, width, height, tilePx);
 }
 
-// ── FILL mode: precise grid-aligned sampling ──
-// Key improvement: minimal jitter to preserve text shape
+// ── FILL mode: organic staggered layout with size variation ──
+// Hex-offset rows + jitter + per-tile random size for natural mosaic feel
 function extractFillPoints(px, w, h, tilePx) {
     let points = [];
     let step = tilePx;
     let halfStep = step * 0.5;
+    let rowIdx = 0;
 
-    for (let y = 0; y < h; y += step) {
+    for (let y = 0; y < h; y += step * 0.85) { // tighter vertical packing
+        // Hex offset: odd rows shift right by half step
+        let rowOffset = (rowIdx % 2) * halfStep * 0.6;
+        rowIdx++;
+
         for (let x = 0; x < w; x += step) {
-            // Sample center of each tile cell
-            let sx = floor(x + halfStep);
+            let sx = floor(x + halfStep + rowOffset);
             let sy = floor(y + halfStep);
-            if (sx >= w || sy >= h) continue;
+            if (sx >= w || sy >= h || sx < 0) continue;
 
             let idx = (sy * w + sx) * 4;
             if (px[idx + 3] > 100) {
-                // Tiny jitter (10-15% of step) to avoid mechanical grid look
-                // but preserve text shape accuracy
-                let jitter = step * 0.12;
+                // Moderate jitter (25-30%) for organic feel while keeping text readable
+                let jitter = step * 0.28;
+                // Per-tile size variation (0.6x ~ 1.4x)
+                let sizeVar = 0.7 + random(0.6);
                 points.push({
-                    x: x + halfStep + random(-jitter, jitter),
+                    x: x + halfStep + rowOffset + random(-jitter, jitter),
                     y: y + halfStep + random(-jitter, jitter),
-                    index: points.length
+                    index: points.length,
+                    size: sizeVar
                 });
             }
         }
@@ -112,11 +118,12 @@ function extractOutlinePoints(px, w, h, tilePx) {
             let mag = sqrt(gx * gx + gy * gy);
 
             if (mag > 200) {
-                let jitter = step * 0.08;
+                let jitter = step * 0.2;
                 points.push({
                     x: x + random(-jitter, jitter),
                     y: y + random(-jitter, jitter),
-                    index: points.length
+                    index: points.length,
+                    size: 0.6 + random(0.8)
                 });
             }
         }
