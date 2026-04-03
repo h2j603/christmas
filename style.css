@@ -171,7 +171,67 @@ body, html {
     gap: 6px;
 }
 
-/* ─── Sections ─── */
+/* ─── Quick Actions ─── */
+.quick-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+/* ─── Collapsible Sections ─── */
+.section-collapsible {
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    flex-shrink: 0;
+}
+
+.section-collapsible[open] {
+    border-color: var(--border-hover);
+}
+
+.section-toggle {
+    display: flex;
+    align-items: center;
+    padding: 9px 12px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    gap: 8px;
+}
+
+.section-toggle::-webkit-details-marker { display: none; }
+.section-toggle::marker { content: ''; }
+
+.section-toggle h2 {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    color: var(--text-2);
+    flex: 1;
+}
+
+.section-toggle::before {
+    content: '▸';
+    font-size: 9px;
+    color: var(--text-3);
+    transition: transform var(--tr);
+    flex-shrink: 0;
+}
+
+.section-collapsible[open] > .section-toggle::before {
+    transform: rotate(90deg);
+}
+
+.section-body {
+    padding: 0 12px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+/* Legacy section support */
 .section {
     background: var(--bg-2);
     border: 1px solid var(--border);

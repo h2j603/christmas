@@ -3,12 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
-    <title>Text Mosaic Generator v3.0</title>
+    <title>Text Mosaic Generator</title>
     <meta name="description" content="이미지를 텍스트 모자이크 아트로 변환하는 크리에이티브 도구">
     <meta name="theme-color" content="#111113">
-    <meta property="og:title" content="Text Mosaic Generator v3.0">
-    <meta property="og:description" content="이미지를 텍스트 모자이크 아트로 변환하는 크리에이티브 도구">
-    <meta property="og:type" content="website">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔲</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -24,7 +21,6 @@
 </head>
 <body>
     <div id="app">
-        <!-- Live Canvas Area (always visible) -->
         <div id="canvas-area">
             <div id="canvas-wrap"></div>
             <div id="canvas-info">
@@ -33,8 +29,7 @@
             </div>
         </div>
 
-        <!-- Fullscreen Overlay -->
-        <div id="fullscreen-view" class="hidden" role="dialog" aria-label="전체화면 미리보기">
+        <div id="fullscreen-view" class="hidden">
             <div id="fullscreen-canvas-holder"></div>
             <button id="closeFullscreen" class="close-btn" aria-label="닫기">
                 <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M1 1L17 17M17 1L1 17" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -42,112 +37,122 @@
             <div class="fullscreen-hint">스크롤: 확대/축소 · 드래그: 이동 · ESC: 닫기</div>
         </div>
 
-        <!-- Controls Panel -->
-        <section id="controls" aria-label="컨트롤 패널">
+        <section id="controls">
             <div class="scroll-container">
-                <!-- Header -->
-                <header class="header">
-                    <div class="logo-group">
-                        <h1 class="logo">TEXT<br>MOSAIC</h1>
-                        <span class="version">v3.0</span>
-                    </div>
-                    <div class="header-actions">
-                        <button id="shortcutHelpBtn" class="icon-btn" title="단축키" aria-label="단축키 도움말">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.5"/><path d="M6 6.5a2 2 0 1 1 2.5 1.94V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="12" r="0.8" fill="currentColor"/></svg>
-                        </button>
-                    </div>
-                </header>
 
-                <!-- Layers Section -->
-                <div class="section">
-                    <div class="section-header">
-                        <h2>LAYERS</h2>
-                        <button id="addLayerBtn" class="icon-btn" title="레이어 추가">
-                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                        </button>
-                    </div>
-                    <div id="layerList" class="layer-list"></div>
+                <!-- ===== Quick Actions (항상 보임) ===== -->
+                <div class="quick-actions">
+                    <label for="imageInput" class="btn-action upload-btn" tabindex="0" role="button">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 5L7 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+                        PHOTO
+                    </label>
+                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif">
+                    <button id="convertBtn" class="btn-action primary">CONVERT</button>
+                    <button id="previewBtn" class="btn-action">FULL</button>
                 </div>
 
-                <!-- Active Layer Settings -->
-                <div id="layerSettings" class="section">
-                    <div class="section-header">
-                        <h2 id="activeLayerTitle">LAYER 1</h2>
+                <!-- ===== LAYERS ===== -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2>LAYERS</h2>
+                        <button id="addLayerBtn" class="icon-btn" title="레이어 추가" onclick="event.stopPropagation()">
+                            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                        </button>
+                    </summary>
+                    <div class="section-body">
+                        <div id="layerList" class="layer-list"></div>
                     </div>
+                </details>
 
+                <!-- ===== TEXT & FONT ===== -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2 id="activeLayerTitle">LAYER 1</h2></summary>
+                    <div class="section-body">
                     <div class="field">
                         <label for="layerText">TEXT</label>
-                        <textarea id="layerText" rows="2" placeholder="텍스트 입력..." spellcheck="false">A</textarea>
+                        <textarea id="layerText" rows="1" placeholder="텍스트 입력..." spellcheck="false">A</textarea>
                     </div>
 
-                    <div class="field">
-                        <label for="layerFont">FONT</label>
-                        <select id="layerFont">
-                            <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
-                            <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
-                            <option value="'Noto Serif KR', serif">Noto Serif KR</option>
-                            <option value="'Black Han Sans', sans-serif">블랙한산스</option>
-                            <option value="serif">Serif</option>
-                            <option value="sans-serif">Sans-serif</option>
-                            <option value="monospace">Monospace</option>
-                            <option value="Georgia, serif">Georgia</option>
-                            <option value="'Courier New', monospace">Courier New</option>
-                        </select>
-                    </div>
-
-                    <div class="field">
-                        <label>WEIGHT</label>
-                        <div class="toggle-group">
-                            <button class="toggle-btn weight-btn active" data-weight="400">Rg</button>
-                            <button class="toggle-btn weight-btn" data-weight="700">Bd</button>
-                            <button class="toggle-btn weight-btn" data-weight="900">Bk</button>
+                    <div class="row-2">
+                        <div class="field">
+                            <label for="layerFont">FONT</label>
+                            <select id="layerFont">
+                                <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
+                                <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
+                                <option value="'Noto Serif KR', serif">Noto Serif KR</option>
+                                <option value="'Black Han Sans', sans-serif">블랙한산스</option>
+                                <option value="serif">Serif</option>
+                                <option value="sans-serif">Sans-serif</option>
+                                <option value="monospace">Monospace</option>
+                                <option value="Georgia, serif">Georgia</option>
+                                <option value="'Courier New', monospace">Courier New</option>
+                            </select>
+                        </div>
+                        <div class="field">
+                            <label>WEIGHT</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn weight-btn active" data-weight="400">Rg</button>
+                                <button class="toggle-btn weight-btn" data-weight="700">Bd</button>
+                                <button class="toggle-btn weight-btn" data-weight="900">Bk</button>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Morph Steps (dynamic cards) -->
+                    <!-- Morph Steps -->
                     <div class="field">
                         <div class="section-header" style="margin-bottom:4px">
                             <label>MORPH STEPS</label>
-                            <button id="addMorphStepBtn" class="icon-btn" title="모프 단계 추가" style="width:22px;height:22px">
-                                <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            <button id="addMorphStepBtn" class="icon-btn" title="모프 단계 추가" style="width:20px;height:20px">
+                                <svg width="10" height="10" viewBox="0 0 16 16" fill="none"><path d="M8 2V14M2 8H14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
                             </button>
                         </div>
                         <div id="morphStepList" class="morph-step-list"></div>
                     </div>
                     </div>
+                </details>
 
+                <!-- ===== TILE ===== -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2>TILE</h2></summary>
+                    <div class="section-body">
                     <div class="row-2">
                         <div class="field">
-                            <label for="layerFontSize">TEXT SIZE <span class="val" id="layerFontSizeVal">50</span>%</label>
+                            <label for="layerFontSize">SIZE <span class="val" id="layerFontSizeVal">50</span>%</label>
                             <input type="range" id="layerFontSize" min="5" max="150" value="50">
                         </div>
                         <div class="field">
-                            <label for="layerTileSize">TILE SIZE <span class="val" id="layerTileSizeVal">5</span>%</label>
+                            <label for="layerTileSize">TILE <span class="val" id="layerTileSizeVal">5</span>%</label>
                             <input type="range" id="layerTileSize" min="0.5" max="25" value="5" step="0.5">
                         </div>
                     </div>
 
-                    <div class="field">
-                        <label>TILE MODE</label>
-                        <div class="toggle-group">
-                            <button class="toggle-btn tilemode-btn active" data-mode="fill">FILL</button>
-                            <button class="toggle-btn tilemode-btn" data-mode="outline">OUTLINE</button>
-                            <button class="toggle-btn tilemode-btn" data-mode="density">DENSITY</button>
+                    <div class="row-2">
+                        <div class="field">
+                            <label>MODE</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn tilemode-btn active" data-mode="fill">FILL</button>
+                                <button class="toggle-btn tilemode-btn" data-mode="outline">OUTLINE</button>
+                                <button class="toggle-btn tilemode-btn" data-mode="density">DENSITY</button>
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label>SHAPE</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn tileshape-btn active" data-shape="rect">▢</button>
+                                <button class="toggle-btn tileshape-btn" data-shape="circle">●</button>
+                                <button class="toggle-btn tileshape-btn" data-shape="char">A</button>
+                                <button class="toggle-btn tileshape-btn" data-shape="adaptive">◐</button>
+                                <button class="toggle-btn tileshape-btn" data-shape="cross">✚</button>
+                                <button class="toggle-btn tileshape-btn" data-shape="voronoi">◇</button>
+                            </div>
                         </div>
                     </div>
-
-                    <div class="field">
-                        <label>TILE SHAPE</label>
-                        <div class="toggle-group">
-                            <button class="toggle-btn tileshape-btn active" data-shape="rect">RECT</button>
-                            <button class="toggle-btn tileshape-btn" data-shape="circle">CIRCLE</button>
-                            <button class="toggle-btn tileshape-btn" data-shape="char">CHAR</button>
-                            <button class="toggle-btn tileshape-btn" data-shape="adaptive">ADAPT</button>
-                            <button class="toggle-btn tileshape-btn" data-shape="cross">CROSS</button>
-                            <button class="toggle-btn tileshape-btn" data-shape="voronoi">VORONOI</button>
-                        </div>
                     </div>
+                </details>
 
+                <!-- ===== TYPOGRAPHY ===== -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>TYPOGRAPHY</h2></summary>
+                    <div class="section-body">
                     <div class="row-2">
                         <div class="field">
                             <label for="layerScaleX">장평 <span class="val" id="layerScaleXVal">100</span>%</label>
@@ -158,12 +163,10 @@
                             <input type="range" id="layerLetterSpace" min="-20" max="50" value="0">
                         </div>
                     </div>
-
                     <div class="field">
                         <label for="layerLineHeight">행간 <span class="val" id="layerLineHeightVal">120</span>%</label>
                         <input type="range" id="layerLineHeight" min="50" max="250" value="120">
                     </div>
-
                     <div class="row-2">
                         <div class="field">
                             <label for="layerOffsetX">X <span class="val" id="layerOffsetXVal">0</span></label>
@@ -174,65 +177,69 @@
                             <input type="range" id="layerOffsetY" min="-300" max="300" value="0">
                         </div>
                     </div>
-
-                    <div class="field">
-                        <label for="layerOpacity">OPACITY <span class="val" id="layerOpacityVal">100</span>%</label>
-                        <input type="range" id="layerOpacity" min="0" max="100" value="100">
-                    </div>
-
-                    <div class="field">
-                        <label for="layerBlendMode">BLEND</label>
-                        <select id="layerBlendMode">
-                            <option value="source-over">Normal</option>
-                            <option value="multiply">Multiply</option>
-                            <option value="screen">Screen</option>
-                            <option value="overlay">Overlay</option>
-                            <option value="difference">Difference</option>
-                            <option value="exclusion">Exclusion</option>
-                            <option value="lighten">Lighten</option>
-                            <option value="darken">Darken</option>
-                            <option value="color-dodge">Color Dodge</option>
-                            <option value="color-burn">Color Burn</option>
-                            <option value="hard-light">Hard Light</option>
-                            <option value="soft-light">Soft Light</option>
-                        </select>
-                    </div>
-
                     <div class="row-2">
                         <div class="field">
-                            <label for="layerMorphDuration">MORPH <span class="val" id="layerMorphDurVal">2</span>초</label>
+                            <label for="layerOpacity">OPACITY <span class="val" id="layerOpacityVal">100</span>%</label>
+                            <input type="range" id="layerOpacity" min="0" max="100" value="100">
+                        </div>
+                        <div class="field">
+                            <label for="layerBlendMode">BLEND</label>
+                            <select id="layerBlendMode">
+                                <option value="source-over">Normal</option>
+                                <option value="multiply">Multiply</option>
+                                <option value="screen">Screen</option>
+                                <option value="overlay">Overlay</option>
+                                <option value="difference">Difference</option>
+                                <option value="exclusion">Exclusion</option>
+                                <option value="lighten">Lighten</option>
+                                <option value="darken">Darken</option>
+                                <option value="color-dodge">Color Dodge</option>
+                                <option value="color-burn">Color Burn</option>
+                                <option value="hard-light">Hard Light</option>
+                                <option value="soft-light">Soft Light</option>
+                            </select>
+                        </div>
+                    </div>
+                    </div>
+                </details>
+
+                <!-- ===== EFFECTS ===== -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2>EFFECTS</h2></summary>
+                    <div class="section-body">
+                    <div class="toggle-group">
+                        <button class="toggle-btn effect-btn" data-effect="morph">MORPH</button>
+                        <button class="toggle-btn effect-btn" data-effect="pulse">PULSE</button>
+                        <button class="toggle-btn effect-btn" data-effect="wave">WAVE</button>
+                        <button class="toggle-btn effect-btn" data-effect="rotate">ROTATE</button>
+                    </div>
+                    <div class="toggle-group">
+                        <button class="toggle-btn effect-btn" data-effect="rotate3d">3D</button>
+                        <button class="toggle-btn effect-btn" data-effect="vortex">VORTEX</button>
+                        <button class="toggle-btn effect-btn" data-effect="scatter">SCATTER</button>
+                        <button class="toggle-btn effect-btn" data-effect="web">WEB</button>
+                    </div>
+                    <div class="toggle-group">
+                        <button class="toggle-btn effect-btn" data-effect="sequencer">SEQUENCE</button>
+                        <button class="toggle-btn effect-btn" data-effect="spring">SPRING</button>
+                    </div>
+                    <div class="row-2">
+                        <div class="field">
+                            <label for="layerMorphDuration">SPEED <span class="val" id="layerMorphDurVal">2</span>s</label>
                             <input type="range" id="layerMorphDuration" min="0.5" max="10" value="2" step="0.5">
                         </div>
                         <div class="field">
-                            <label for="layerMorphHold">HOLD <span class="val" id="layerMorphHoldVal">0.5</span>초</label>
+                            <label for="layerMorphHold">HOLD <span class="val" id="layerMorphHoldVal">0.5</span>s</label>
                             <input type="range" id="layerMorphHold" min="0" max="5" value="0.5" step="0.1">
                         </div>
                     </div>
-
-                    <div class="field">
-                        <label>EFFECTS</label>
-                        <div class="toggle-group">
-                            <button class="toggle-btn effect-btn" data-effect="web">WEB</button>
-                            <button class="toggle-btn effect-btn" data-effect="rotate">ROTATE</button>
-                            <button class="toggle-btn effect-btn" data-effect="pulse">PULSE</button>
-                            <button class="toggle-btn effect-btn" data-effect="morph">MORPH</button>
-                        </div>
-                        <div class="toggle-group" style="margin-top:4px">
-                            <button class="toggle-btn effect-btn" data-effect="wave">WAVE</button>
-                            <button class="toggle-btn effect-btn" data-effect="rotate3d">3D</button>
-                            <button class="toggle-btn effect-btn" data-effect="vortex">VORTEX</button>
-                        </div>
-                        <div class="toggle-group" style="margin-top:4px">
-                            <button class="toggle-btn effect-btn" data-effect="scatter">SCATTER</button>
-                            <button class="toggle-btn effect-btn" data-effect="sequencer">SEQUENCE</button>
-                            <button class="toggle-btn effect-btn" data-effect="spring">SPRING</button>
-                        </div>
                     </div>
-                </div>
+                </details>
 
-                <!-- Image Filter Section -->
-                <div class="section">
-                    <div class="section-header"><h2>IMAGE FILTER</h2></div>
+                <!-- ===== IMAGE FILTER ===== -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>IMAGE FILTER</h2></summary>
+                    <div class="section-body">
                     <div class="row-2">
                         <div class="field">
                             <label for="imgBrightness">BRIGHT <span class="val" id="imgBrightnessVal">100</span>%</label>
@@ -251,17 +258,19 @@
                         <div class="field">
                             <label>FILTER</label>
                             <div class="toggle-group">
-                                <button class="toggle-btn imgfilter-btn active" data-filter="none">NONE</button>
+                                <button class="toggle-btn imgfilter-btn active" data-filter="none">OFF</button>
                                 <button class="toggle-btn imgfilter-btn" data-filter="grayscale">GRAY</button>
                                 <button class="toggle-btn imgfilter-btn" data-filter="invert">INVERT</button>
                             </div>
                         </div>
                     </div>
-                </div>
+                    </div>
+                </details>
 
-                <!-- Background Section -->
-                <div class="section">
-                    <div class="section-header"><h2>BACKGROUND</h2></div>
+                <!-- ===== BACKGROUND ===== -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>BACKGROUND</h2></summary>
+                    <div class="section-body">
                     <div class="row-2">
                         <div class="field">
                             <label for="bgColor">COLOR 1</label>
@@ -272,28 +281,28 @@
                             <input type="color" id="bgColor2" value="#111113">
                         </div>
                     </div>
-                    <div class="field">
-                        <label>GRADIENT</label>
-                        <div class="toggle-group">
-                            <button id="gradNone" class="toggle-btn active">NONE</button>
-                            <button id="gradLinear" class="toggle-btn">LINEAR</button>
-                            <button id="gradRadial" class="toggle-btn">RADIAL</button>
+                    <div class="toggle-group">
+                        <button id="gradNone" class="toggle-btn active">NONE</button>
+                        <button id="gradLinear" class="toggle-btn">LINEAR</button>
+                        <button id="gradRadial" class="toggle-btn">RADIAL</button>
+                    </div>
+                    <div class="row-2">
+                        <div class="field">
+                            <label for="gradAngle">ANGLE <span class="val" id="gradAngleVal">0</span>°</label>
+                            <input type="range" id="gradAngle" min="0" max="360" value="0">
+                        </div>
+                        <div class="field">
+                            <label for="noiseAmount">NOISE <span class="val" id="noiseAmountVal">0</span>%</label>
+                            <input type="range" id="noiseAmount" min="0" max="100" value="0">
                         </div>
                     </div>
-                    <div class="field">
-                        <label for="gradAngle">ANGLE <span class="val" id="gradAngleVal">0</span>°</label>
-                        <input type="range" id="gradAngle" min="0" max="360" value="0">
                     </div>
-                    <div class="field">
-                        <label for="noiseAmount">NOISE <span class="val" id="noiseAmountVal">0</span>%</label>
-                        <input type="range" id="noiseAmount" min="0" max="100" value="0">
-                    </div>
-                </div>
+                </details>
 
-                <!-- Export Section -->
-                <div class="section">
-                    <div class="section-header"><h2>CANVAS & EXPORT</h2></div>
-
+                <!-- ===== EXPORT ===== -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>EXPORT</h2></summary>
+                    <div class="section-body">
                     <div class="row-3">
                         <div class="field">
                             <label for="canvasW">W</label>
@@ -305,64 +314,44 @@
                         </div>
                         <button id="resizeBtn" class="btn-sm">SET</button>
                     </div>
-
                     <div class="canvas-presets">
                         <button class="preset-btn" data-w="1080" data-h="1080">1:1</button>
                         <button class="preset-btn" data-w="1080" data-h="1350">4:5</button>
                         <button class="preset-btn" data-w="1080" data-h="1920">9:16</button>
                         <button class="preset-btn" data-w="1920" data-h="1080">16:9</button>
                     </div>
-
-                    <div class="row-2">
-                        <label for="imageInput" class="btn-action upload-btn" tabindex="0" role="button">
-                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 5L7 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                            PHOTO
-                        </label>
-                        <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif">
-                        <button id="convertBtn" class="btn-action primary">CONVERT</button>
+                    <div class="toggle-group">
+                        <button class="toggle-btn export-scale-btn active" data-scale="1">1x</button>
+                        <button class="toggle-btn export-scale-btn" data-scale="2">2x</button>
+                        <button class="toggle-btn export-scale-btn" data-scale="4">4x</button>
                     </div>
-
-                    <div class="field">
-                        <label>EXPORT SCALE</label>
-                        <div class="toggle-group">
-                            <button class="toggle-btn export-scale-btn active" data-scale="1">1x</button>
-                            <button class="toggle-btn export-scale-btn" data-scale="2">2x</button>
-                            <button class="toggle-btn export-scale-btn" data-scale="4">4x</button>
-                        </div>
-                    </div>
-
                     <div class="row-3">
-                        <button id="previewBtn" class="btn-action">PREVIEW</button>
                         <button id="saveBtn" class="btn-action">SAVE</button>
                         <button id="saveTransBtn" class="btn-action">SAVE TP</button>
                     </div>
-
                     <div class="row-3">
-                        <button id="exportVideoBtn" class="btn-action rec-btn">EXPORT VIDEO</button>
+                        <button id="exportVideoBtn" class="btn-action rec-btn">VIDEO</button>
                         <div class="field">
-                            <input type="number" id="videoDuration" value="3" min="1" max="30" style="text-align:center;" aria-label="영상 길이(초)">
+                            <input type="number" id="videoDuration" value="3" min="1" max="30" style="text-align:center">
                         </div>
                         <span class="unit-label">초</span>
-                    </div>
-                    <div class="row-3">
                         <div class="field">
-                            <label>LOOP</label>
-                            <input type="number" id="videoLoops" value="1" min="1" max="20" style="text-align:center;" aria-label="루프 횟수">
+                            <input type="number" id="videoLoops" value="1" min="1" max="20" style="text-align:center">
                         </div>
-                        <span class="unit-label" style="padding-bottom:4px">회 반복</span>
+                        <span class="unit-label">루프</span>
                     </div>
                     <div id="exportProgress" class="progress-bar hidden">
                         <div id="exportProgressFill" class="progress-fill"></div>
                     </div>
-                </div>
+                    </div>
+                </details>
 
-                <p id="info-text" class="status-msg" role="status" aria-live="polite">사진 선택 → CONVERT</p>
+                <p id="info-text" class="status-msg" role="status">사진 선택 → CONVERT</p>
                 <div class="safe-bottom"></div>
             </div>
         </section>
 
-        <!-- Shortcut Modal -->
-        <div id="shortcutModal" class="modal hidden" role="dialog">
+        <div id="shortcutModal" class="modal hidden">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3>단축키</h3>
@@ -372,9 +361,9 @@
                     <div class="shortcut-row"><kbd>Ctrl</kbd>+<kbd>Enter</kbd><span>변환</span></div>
                     <div class="shortcut-row"><kbd>Ctrl</kbd>+<kbd>S</kbd><span>이미지 저장</span></div>
                     <div class="shortcut-row"><kbd>F</kbd><span>전체화면</span></div>
-                    <div class="shortcut-row"><kbd>ESC</kbd><span>전체화면 닫기</span></div>
+                    <div class="shortcut-row"><kbd>ESC</kbd><span>닫기</span></div>
                     <div class="shortcut-row"><kbd>1</kbd>~<kbd>9</kbd><span>레이어 선택</span></div>
-                    <div class="shortcut-row"><kbd>V</kbd><span>레이어 표시/숨김</span></div>
+                    <div class="shortcut-row"><kbd>V</kbd><span>표시/숨김</span></div>
                 </div>
             </div>
         </div>
