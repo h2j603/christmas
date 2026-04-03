@@ -524,7 +524,17 @@ function enterFullscreen() {
     let fsView = document.getElementById('fullscreen-view');
     let fsHolder = document.getElementById('fullscreen-canvas-holder');
     let cnv = document.querySelector('#canvas-wrap canvas');
-    if (cnv) fsHolder.appendChild(cnv);
+    if (cnv) {
+        fsHolder.appendChild(cnv);
+        // Fit canvas to fullscreen
+        let vw = window.innerWidth;
+        let vh = window.innerHeight;
+        let scaleX = vw / width;
+        let scaleY = vh / height;
+        let s = Math.min(scaleX, scaleY) * 0.95;
+        cnv.style.width = Math.floor(width * s) + 'px';
+        cnv.style.height = Math.floor(height * s) + 'px';
+    }
     fsView.classList.remove('hidden');
 }
 
@@ -536,4 +546,5 @@ function exitFullscreen() {
     fsView.classList.add('hidden');
     offset = createVector(0, 0);
     zoom = 1.0;
+    fitCanvasToPreview(); // restore preview size
 }
