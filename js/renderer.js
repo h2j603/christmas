@@ -106,22 +106,21 @@ function drawLayers(frameNum) {
                     // NOW advance to next step
                     L.morphProgress = 0;
                     L.morphStepIdx++;
-                    if (L.morphStepIdx >= L.morphSteps.length - 1) L.morphStepIdx = 0;
+                    if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
                     L._morphPairs = null;
                 }
             } else {
                 let ppf = 1 / (L.morphDuration * 60);
                 L.morphProgress += ppf;
                 if (L.morphProgress >= 1) {
-                    L.morphProgress = 1; // clamp at destination
+                    L.morphProgress = 1;
                     if (L.morphHold > 0) {
                         L.morphHolding = true;
                         L.morphHoldTimer = L.morphHold;
                     } else {
-                        // No hold — advance immediately
                         L.morphProgress = 0;
                         L.morphStepIdx++;
-                        if (L.morphStepIdx >= L.morphSteps.length - 1) L.morphStepIdx = 0;
+                        if (L.morphStepIdx >= L.morphSteps.length) L.morphStepIdx = 0;
                         L._morphPairs = null;
                     }
                 }
