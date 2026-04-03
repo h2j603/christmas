@@ -91,6 +91,7 @@ function markGradientDirty() { gradientDirty = true; }
 
 function drawLayers(frameNum) {
     ensureImagePixels();
+    updateImageFilterCache();
     for (let i = 0; i < layers.length; i++) {
         let L = layers[i];
         if (!L.visible || L.currentTiles.length === 0) continue;
@@ -113,11 +114,15 @@ function drawLayers(frameNum) {
                     if (L.morphHold > 0) { L.morphHolding = true; L.morphHoldTimer = L.morphHold; }
                 }
             }
-            // Set tiles1/tiles2 for current step pair
+            // Set tiles1/tiles2 BEFORE updateMorphedTiles (prevents null-frame)
             let fromIdx = L.morphStepIdx;
             let toIdx = (L.morphStepIdx + 1) % L.morphSteps.length;
             L.tiles1 = L.morphSteps[fromIdx];
             L.tiles2 = L.morphSteps[toIdx];
+            // Rebuild morphPairs if invalidated (uses current tiles1/tiles2)
+            if (!L._morphPairs) {
+                L._morphPairs = buildSpatialMorphMap(L.tiles1, L.tiles2);
+            }
             updateMorphedTiles(L);
         } else if (!L.effects.morph && L.morphSteps && L.morphSteps.length > 0) {
             L.currentTiles = L.morphSteps[0];
@@ -966,6 +971,20 @@ function ensureImagePixels() {
     _imgPixelsId = id;
 }
 
+// Image filter cache (read from DOM once per frame via drawLayers)
+let _imgBrightness = 100, _imgContrast = 100, _imgSaturate = 100, _imgFilter = 'none';
+
+function updateImageFilterCache() {
+    let bEl = document.getElementById('imgBrightness');
+    let cEl = document.getElementById('imgContrast');
+    let sEl = document.getElementById('imgSaturate');
+    if (bEl) _imgBrightness = parseFloat(bEl.value);
+    if (cEl) _imgContrast = parseFloat(cEl.value);
+    if (sEl) _imgSaturate = parseFloat(sEl.value);
+    let activeFilter = document.querySelector('.imgfilter-btn.active');
+    _imgFilter = activeFilter ? activeFilter.dataset.filter : 'none';
+}
+
 function getImageColor(x, y) {
     if (!img || !img.pixels || img.pixels.length === 0) return color(200);
     let ax = x - _currentLayerOffsetX;
@@ -973,5 +992,39 @@ function getImageColor(x, y) {
     let ix = constrain(floor(ax / width * img.width), 0, img.width - 1);
     let iy = constrain(floor(ay / height * img.height), 0, img.height - 1);
     let idx = (iy * img.width + ix) * 4;
-    return color(img.pixels[idx], img.pixels[idx + 1], img.pixels[idx + 2]);
+    let r = img.pixels[idx], g = img.pixels[idx + 1], b = img.pixels[idx + 2];
+
+    // Apply brightness
+    if (_imgBrightness !== 100) {
+        let f = _imgBrightness / 100;
+        r *= f; g *= f; b *= f;
+    }
+
+    // Apply contrast
+    if (_imgContrast !== 100) {
+        let f = (_imgContrast / 100);
+        let intercept = 128 * (1 - f);
+        r = r * f + intercept;
+        g = g * f + intercept;
+        b = b * f + intercept;
+    }
+
+    // Apply saturate
+    if (_imgSaturate !== 100) {
+        let s = _imgSaturate / 100;
+        let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = gray + s * (r - gray);
+        g = gray + s * (g - gray);
+        b = gray + s * (b - gray);
+    }
+
+    // Apply filter
+    if (_imgFilter === 'grayscale') {
+        let gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = g = b = gray;
+    } else if (_imgFilter === 'invert') {
+        r = 255 - r; g = 255 - g; b = 255 - b;
+    }
+
+    return color(constrain(r, 0, 255), constrain(g, 0, 255), constrain(b, 0, 255));
 }

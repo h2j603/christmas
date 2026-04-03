@@ -193,6 +193,24 @@ function bindGlobalEvents() {
         });
     });
 
+    // Image filter sliders
+    ['imgBrightness', 'imgBrightnessVal', 'imgContrast', 'imgContrastVal', 'imgSaturate', 'imgSaturateVal'].forEach((id, i) => {
+        if (i % 2 === 1) return; // skip val ids
+        let valId = ['imgBrightness', 'imgBrightnessVal', 'imgContrast', 'imgContrastVal', 'imgSaturate', 'imgSaturateVal'][i + 1];
+        let el = document.getElementById(id);
+        if (el) el.addEventListener('input', () => {
+            let vel = document.getElementById(valId);
+            if (vel) vel.textContent = el.value;
+        });
+    });
+
+    document.querySelectorAll('.imgfilter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.imgfilter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
     // Shortcut modal
     document.getElementById('shortcutHelpBtn').addEventListener('click', () => {
         document.getElementById('shortcutModal').classList.remove('hidden');
@@ -288,6 +306,7 @@ function bindLayerSettingsEvents() {
         ['layerOffsetY', 'layerOffsetYVal', 'offsetY', false],
         ['layerOpacity', 'layerOpacityVal', 'opacity', false],
         ['layerMorphDuration', 'layerMorphDurVal', 'morphDuration', false],
+        ['layerMorphHold', 'layerMorphHoldVal', 'morphHold', false],
     ];
 
     for (let [sliderId, valId, prop, regen] of sliderBindings) {

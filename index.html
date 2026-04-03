@@ -12,7 +12,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔲</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;700;900&family=Black+Han+Sans&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script>
       (function(d) {
@@ -96,7 +96,8 @@
                                 <option value="monospace">Monospace</option>
                                 <option value="Georgia, serif">Georgia</option>
                                 <option value="'Courier New', monospace">Courier New</option>
-                                <option value="'Soonbatang', serif">순바탕</option>
+                                <option value="'Noto Serif KR', serif">Noto Serif KR</option>
+                                <option value="'Black Han Sans', sans-serif">블랙한산스</option>
                             </select>
                         </div>
                         <div class="field">
@@ -109,7 +110,8 @@
                                 <option value="monospace">Monospace</option>
                                 <option value="Georgia, serif">Georgia</option>
                                 <option value="'Courier New', monospace">Courier New</option>
-                                <option value="'Soonbatang', serif">순바탕</option>
+                                <option value="'Noto Serif KR', serif">Noto Serif KR</option>
+                                <option value="'Black Han Sans', sans-serif">블랙한산스</option>
                             </select>
                         </div>
                     </div>
@@ -243,6 +245,35 @@
                             <button class="toggle-btn effect-btn" data-effect="scatter">SCATTER</button>
                             <button class="toggle-btn effect-btn" data-effect="sequencer">SEQUENCE</button>
                             <button class="toggle-btn effect-btn" data-effect="spring">SPRING</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Image Filter Section -->
+                <div class="section">
+                    <div class="section-header"><h2>IMAGE FILTER</h2></div>
+                    <div class="row-2">
+                        <div class="field">
+                            <label for="imgBrightness">BRIGHT <span class="val" id="imgBrightnessVal">100</span>%</label>
+                            <input type="range" id="imgBrightness" min="20" max="300" value="100">
+                        </div>
+                        <div class="field">
+                            <label for="imgContrast">CONTRAST <span class="val" id="imgContrastVal">100</span>%</label>
+                            <input type="range" id="imgContrast" min="20" max="300" value="100">
+                        </div>
+                    </div>
+                    <div class="row-2">
+                        <div class="field">
+                            <label for="imgSaturate">SATURATE <span class="val" id="imgSaturateVal">100</span>%</label>
+                            <input type="range" id="imgSaturate" min="0" max="300" value="100">
+                        </div>
+                        <div class="field">
+                            <label>FILTER</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn imgfilter-btn active" data-filter="none">NONE</button>
+                                <button class="toggle-btn imgfilter-btn" data-filter="grayscale">GRAY</button>
+                                <button class="toggle-btn imgfilter-btn" data-filter="invert">INVERT</button>
+                            </div>
                         </div>
                     </div>
                 </div>
