@@ -311,26 +311,87 @@ function updateMorphedTiles(L) {
 // ═══════════════════════════════════
 
 function drawWebLines(L) {
-    strokeWeight(0.6);
-    let maxDist = min(width, height) * 0.08;
+    let maxDist = min(width, height) * 0.1;
     let tiles = L.currentTiles;
+    let fn = frameCount;
+    let ctx = drawingContext;
 
+    // Pass 1: Draw bezier connections
+    noFill();
     for (let i = 0; i < tiles.length; i++) {
         let t1 = tiles[i];
         let conn = 0;
-        for (let j = i + 1; j < tiles.length && conn < 3; j++) {
+        for (let j = i + 1; j < tiles.length && conn < 4; j++) {
             let t2 = tiles[j];
             let dx = t1.x - t2.x, dy = t1.y - t2.y;
             let d = sqrt(dx * dx + dy * dy);
             if (d < maxDist) {
                 let c = getImageColor((t1.x + t2.x) / 2, (t1.y + t2.y) / 2);
-                let a = map(d, 0, maxDist, 180, 20);
-                stroke(red(c), green(c), blue(c), a);
-                line(t1.x, t1.y, t2.x, t2.y);
+                let proximity = 1 - d / maxDist; // 0 at max, 1 at zero
+                let a = proximity * 160 + 20;
+
+                // Thickness varies with distance
+                let sw = lerp(0.3, 1.8, proximity);
+                strokeWeight(sw);
+
+                // Color with pulsing alpha
+                let pulseA = a * (0.7 + 0.3 * sin(fn * 0.04 + i * 0.5 + j * 0.3));
+                stroke(red(c), green(c), blue(c), pulseA);
+
+                // Bezier curve — control point offset perpendicular to line
+                let mx = (t1.x + t2.x) / 2;
+                let my = (t1.y + t2.y) / 2;
+                let perpX = -(t2.y - t1.y) / d; // perpendicular unit vector
+                let perpY = (t2.x - t1.x) / d;
+                let curveAmt = sin(fn * 0.02 + (i + j) * 0.4) * d * 0.2;
+                let cx1 = mx + perpX * curveAmt;
+                let cy1 = my + perpY * curveAmt;
+
+                ctx.beginPath();
+                ctx.moveTo(t1.x, t1.y);
+                ctx.quadraticCurveTo(cx1, cy1, t2.x, t2.y);
+                ctx.stroke();
+
+                // Traveling light dot along the curve
+                let dotT = ((fn * 0.015 + i * 0.7) % 1);
+                let dotX = (1-dotT)*(1-dotT)*t1.x + 2*(1-dotT)*dotT*cx1 + dotT*dotT*t2.x;
+                let dotY = (1-dotT)*(1-dotT)*t1.y + 2*(1-dotT)*dotT*cy1 + dotT*dotT*t2.y;
+                ctx.save();
+                ctx.globalAlpha = proximity * 0.6;
+                ctx.fillStyle = 'rgba(' + floor(red(c)) + ',' + floor(green(c)) + ',' + floor(blue(c)) + ',1)';
+                ctx.beginPath();
+                ctx.arc(dotX, dotY, sw + 1, 0, TWO_PI);
+                ctx.fill();
+                ctx.restore();
+
                 conn++;
             }
         }
     }
+
+    // Pass 2: Glow dots at connected nodes
+    noStroke();
+    ctx.save();
+    for (let i = 0; i < tiles.length; i++) {
+        let t = tiles[i];
+        // Check if this tile has any connections
+        let hasConn = false;
+        for (let j = 0; j < tiles.length && !hasConn; j++) {
+            if (i === j) continue;
+            let dx = t.x - tiles[j].x, dy = t.y - tiles[j].y;
+            if (dx*dx + dy*dy < maxDist*maxDist) hasConn = true;
+        }
+        if (!hasConn) continue;
+
+        let c = getImageColor(t.x, t.y);
+        let glowSize = 2 + sin(fn * 0.05 + i * 0.8) * 1;
+        ctx.globalAlpha = 0.3 + 0.15 * sin(fn * 0.06 + i);
+        ctx.fillStyle = 'rgba(' + floor(red(c)) + ',' + floor(green(c)) + ',' + floor(blue(c)) + ',1)';
+        ctx.beginPath();
+        ctx.arc(t.x, t.y, glowSize, 0, TWO_PI);
+        ctx.fill();
+    }
+    ctx.restore();
 }
 
 // ═══════════════════════════════════
