@@ -208,7 +208,9 @@ function generateLayerTiles(L) {
     L.morphDirection = 1;
     L._nearestMap = null;
     L._morphPairs = null;
-    L._voronoiCells = null; // invalidate voronoi cache
+    L._voronoiCells = null;
     L._scatterOrigins = null;
+    L._seqRank = null;
+    L._springState = null;
     randomSeed(millis());
 }

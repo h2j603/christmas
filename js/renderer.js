@@ -116,12 +116,13 @@ function drawLayers(frameNum) {
 
         // Sequencer: progressive reveal 0→1→hold→0→hold
         if (L.effects.sequencer) {
-            let spd = 1 / (L.morphDuration * 120); // slower, one full cycle
-            L.sequencerProgress = min(1, L.sequencerProgress + spd);
+            let spd = 1 / (L.morphDuration * 120);
+            L.sequencerProgress += spd;
+            if (L.sequencerProgress > 1.5) L.sequencerProgress = 0; // loop with pause
         }
 
-        // Spring: initialize spring physics state
-        if (L.effects.spring && !L._springState) {
+        // Spring: initialize spring physics state (reinit if tile count changed)
+        if (L.effects.spring && (!L._springState || L._springState.length !== L.currentTiles.length)) {
             L._springState = [];
             for (let j = 0; j < L.currentTiles.length; j++) {
                 L._springState.push({
@@ -132,14 +133,14 @@ function drawLayers(frameNum) {
             }
         }
 
+        // Store layer offset BEFORE any rendering (used by getImageColor)
+        _currentLayerOffsetX = L.offsetX;
+        _currentLayerOffsetY = L.offsetY;
+
         push();
         drawingContext.globalAlpha = L.opacity / 100;
         drawingContext.globalCompositeOperation = L.blendMode;
         translate(L.offsetX, L.offsetY);
-
-        // Store current layer offset for color sampling
-        _currentLayerOffsetX = L.offsetX;
-        _currentLayerOffsetY = L.offsetY;
 
         if (L.effects.web) drawWebLines(L);
 
@@ -328,18 +329,21 @@ function drawTiles(L, frameNum) {
         }
     }
 
-    // Sequencer: precompute per-tile reveal timing
-    let seqActive = L.effects.sequencer && L.sequencerProgress < 1;
-    // Compute sort order for sequencer (left-to-right, top-to-bottom)
+    // Sequencer: precompute per-tile reveal timing (cached on tiles1)
+    let seqActive = L.effects.sequencer && L.sequencerProgress < 1.0;
     let seqOrder = null;
     if (seqActive) {
-        seqOrder = tiles.map((t, i) => ({ i, sort: t.x * 0.7 + t.y * 0.3 }));
-        seqOrder.sort((a, b) => a.sort - b.sort);
-        let seqRank = new Float32Array(tiles.length);
-        for (let k = 0; k < seqOrder.length; k++) {
-            seqRank[seqOrder[k].i] = k / max(1, seqOrder.length - 1);
+        // Cache reveal order based on tiles1 (stable positions, not morphed)
+        if (!L._seqRank || L._seqRank.length !== tiles.length) {
+            let src = L.tiles1.length === tiles.length ? L.tiles1 : tiles;
+            let sorted = src.map((t, i) => ({ i, sort: t.x * 0.7 + t.y * 0.3 }));
+            sorted.sort((a, b) => a.sort - b.sort);
+            L._seqRank = new Float32Array(tiles.length);
+            for (let k = 0; k < sorted.length; k++) {
+                L._seqRank[sorted[k].i] = k / max(1, sorted.length - 1);
+            }
         }
-        seqOrder = seqRank; // now seqOrder[i] = 0..1 normalized reveal order
+        seqOrder = L._seqRank;
     }
 
     // Spring: update physics
@@ -623,7 +627,8 @@ function drawVoronoiTiles(L, tiles, baseSz, frameNum) {
             let sy = (minY / height) * ih;
             let sw = ((maxX - minX) / width) * iw;
             let sh = ((maxY - minY) / height) * ih;
-            drawingContext.drawImage(img.canvas || img.elt, sx, sy, sw, sh, minX, minY, maxX - minX, maxY - minY);
+            let imgEl = (img.canvas ? img.canvas : (img.elt ? img.elt : null));
+            if (imgEl) drawingContext.drawImage(imgEl, sx, sy, sw, sh, minX, minY, maxX - minX, maxY - minY);
         } else {
             drawingContext.fillStyle = 'rgb(' + red(c) + ',' + green(c) + ',' + blue(c) + ')';
             drawingContext.fill();
@@ -866,15 +871,35 @@ function draw3DRotatedTiles(L, frameNum) {
     }
 }
 
-// ── Lit tile renderers (use pre-computed lit color, no image sampling) ──
+// ── Lit tile renderers — render image texture + lighting tint overlay ──
 function drawTileRectLit(sz, c) {
-    fill(c);
-    rect(-sz/2, -sz/2, sz, sz);
+    if (img) {
+        image(img, -sz/2, -sz/2, sz, sz);
+        // Lighting tint overlay
+        drawingContext.save();
+        drawingContext.globalCompositeOperation = 'multiply';
+        drawingContext.fillStyle = 'rgb(' + red(c) + ',' + green(c) + ',' + blue(c) + ')';
+        drawingContext.fillRect(-sz/2, -sz/2, sz, sz);
+        drawingContext.restore();
+    } else {
+        fill(c); rect(-sz/2, -sz/2, sz, sz);
+    }
 }
 
 function drawTileCircleLit(sz, c) {
-    fill(c);
-    ellipse(0, 0, sz, sz);
+    if (img) {
+        drawingContext.save();
+        drawingContext.beginPath();
+        drawingContext.arc(0, 0, sz/2, 0, TWO_PI);
+        drawingContext.clip();
+        image(img, -sz/2, -sz/2, sz, sz);
+        drawingContext.globalCompositeOperation = 'multiply';
+        drawingContext.fillStyle = 'rgb(' + red(c) + ',' + green(c) + ',' + blue(c) + ')';
+        drawingContext.fill();
+        drawingContext.restore();
+    } else {
+        fill(c); ellipse(0, 0, sz, sz);
+    }
 }
 
 function drawTileCharLit(sz, c, charSource, idx, L) {
@@ -888,11 +913,21 @@ function drawTileCharLit(sz, c, charSource, idx, L) {
 }
 
 function drawTileCrossLit(sz, c) {
-    fill(c);
-    let arm = sz * 0.3;
-    let half = sz / 2;
-    rect(-arm/2, -half, arm, sz);
-    rect(-half, -arm/2, sz, arm);
+    let arm = sz * 0.3, half = sz / 2;
+    if (img) {
+        drawingContext.save();
+        drawingContext.beginPath();
+        drawingContext.rect(-arm/2, -half, arm, sz);
+        drawingContext.rect(-half, -arm/2, sz, arm);
+        drawingContext.clip();
+        image(img, -half, -half, sz, sz);
+        drawingContext.globalCompositeOperation = 'multiply';
+        drawingContext.fillStyle = 'rgb(' + red(c) + ',' + green(c) + ',' + blue(c) + ')';
+        drawingContext.fill();
+        drawingContext.restore();
+    } else {
+        fill(c); rect(-arm/2, -half, arm, sz); rect(-half, -arm/2, sz, arm);
+    }
 }
 
 // ═══════════════════════════════════
