@@ -1,7 +1,6 @@
 /* ═══════════════════════════════════
-   IMAGE TEXT WARP v2 — Main Engine
-   Canvas adapts to image aspect ratio
-   Smooth animation with requestAnimationFrame
+   IMAGE TEXT WARP v3 — Optimized Engine
+   New effects, presets, zoom/pan, clipboard, WebM export
    ═══════════════════════════════════ */
 
 // ── State ──
@@ -39,6 +38,25 @@ const S = {
     srcImageData: null,
     srcW: 0, srcH: 0,
     lastTextKey: '',
+    // v3: zoom/pan
+    zoom: 1, panX: 0, panY: 0,
+    isPanning: false, panStartX: 0, panStartY: 0,
+    // v3: before/after
+    showOriginal: false,
+    // v3: half-res preview
+    previewScale: 1,
+};
+
+// ── Presets ──
+const PRESETS = {
+    'cinematic': { mode:'displace', intensity:60, edgeSoftness:55, detail:40, outsideColor:'dark', insideColor:'bright', bgOpacity:40, invert:false },
+    'glitch-art': { mode:'glitch', intensity:80, edgeSoftness:30, detail:70, outsideColor:'original', insideColor:'original', bgOpacity:10, invert:false },
+    'dream': { mode:'liquid', intensity:50, edgeSoftness:70, detail:60, outsideColor:'sepia', insideColor:'saturate', bgOpacity:20, invert:false },
+    'split-rgb': { mode:'chromatic', intensity:70, edgeSoftness:45, detail:50, outsideColor:'dark', insideColor:'original', bgOpacity:25, invert:false },
+    'shattered': { mode:'shatter', intensity:85, edgeSoftness:20, detail:80, outsideColor:'grayscale', insideColor:'bright', bgOpacity:35, invert:false },
+    'focus-pop': { mode:'focus', intensity:90, edgeSoftness:50, detail:50, outsideColor:'grayscale', insideColor:'saturate', bgOpacity:0, invert:false },
+    'inverted': { mode:'displace', intensity:70, edgeSoftness:40, detail:50, outsideColor:'original', insideColor:'dark', bgOpacity:20, invert:true },
+    'wave-pulse': { mode:'wave', intensity:65, edgeSoftness:50, detail:55, outsideColor:'dark', insideColor:'original', bgOpacity:30, anim:'pulse-wave', animSpeed:1.2, invert:false },
 };
 
 function init() {
@@ -352,6 +370,105 @@ function applyShatter(src, out, w, h, time) {
     }
 }
 
+// ── NEW EFFECT: Chromatic Aberration ──
+function applyChromatic(src, out, w, h, time) {
+    const str = (S.intensity / 100) * 40;
+    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.25);
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const idx = y * w + x, di = idx * 4;
+            const d = S.distField[idx], isIn = S.insideMask[idx];
+            let amt = isIn ? 0 : Math.min(1, d / soft) * str;
+            if (S.anim !== 'none') amt *= 0.7 + 0.3 * Math.sin(time * 2 + d * 0.01);
+            const angle = Math.atan2(y - (S.textY / 100) * h, x - (S.textX / 100) * w);
+            const rOx = Math.round(Math.cos(angle) * amt);
+            const rOy = Math.round(Math.sin(angle) * amt);
+            const bOx = Math.round(Math.cos(angle + Math.PI) * amt);
+            const bOy = Math.round(Math.sin(angle + Math.PI) * amt);
+            const rsx = Math.max(0, Math.min(w - 1, x + rOx));
+            const rsy = Math.max(0, Math.min(h - 1, y + rOy));
+            const bsx = Math.max(0, Math.min(w - 1, x + bOx));
+            const bsy = Math.max(0, Math.min(h - 1, y + bOy));
+            out[di]     = src[(rsy * w + rsx) * 4];
+            out[di + 1] = src[di + 1];
+            out[di + 2] = src[(bsy * w + bsx) * 4 + 2];
+            out[di + 3] = 255;
+        }
+    }
+}
+
+// ── NEW EFFECT: Liquid Warp (Perlin-like noise displacement) ──
+function applyLiquid(src, out, w, h, time) {
+    const str = (S.intensity / 100) * 100;
+    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.25);
+    const freq = 0.003 + (S.detail / 100) * 0.015;
+    const rng = mulberry32(S.seed);
+    // Simple layered noise for organic feel
+    const phaseX = rng() * 1000, phaseY = rng() * 1000;
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            const idx = y * w + x, di = idx * 4;
+            const d = S.distField[idx], isIn = S.insideMask[idx];
+            let amt = isIn ? 0.05 : Math.min(1, d / soft);
+            amt *= str;
+            if (S.anim !== 'none') {
+                amt *= 0.6 + 0.4 * Math.sin(time * 1.5 + x * 0.003 + y * 0.002);
+            }
+            const n1x = Math.sin(x * freq + phaseX + time * 0.8) * Math.cos(y * freq * 0.7 + time * 0.6);
+            const n1y = Math.cos(y * freq + phaseY + time * 0.8) * Math.sin(x * freq * 0.7 + time * 0.6);
+            const n2x = Math.sin(x * freq * 2.1 + y * freq * 0.5 + time * 1.2) * 0.5;
+            const n2y = Math.cos(y * freq * 2.1 + x * freq * 0.5 + time * 1.2) * 0.5;
+            const dx = (n1x + n2x) * amt;
+            const dy = (n1y + n2y) * amt;
+            const sx = Math.max(0, Math.min(w - 1, x + dx + 0.5 | 0));
+            const sy = Math.max(0, Math.min(h - 1, y + dy + 0.5 | 0));
+            const si = (sy * w + sx) * 4;
+            out[di] = src[si]; out[di + 1] = src[si + 1]; out[di + 2] = src[si + 2]; out[di + 3] = src[si + 3];
+        }
+    }
+}
+
+// ── NEW EFFECT: Glitch Slice ──
+function applyGlitch(src, out, w, h, time) {
+    const str = (S.intensity / 100) * 80;
+    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.2);
+    const numSlices = 5 + Math.round((S.detail / 100) * 40);
+    const sliceH = Math.ceil(h / numSlices);
+    const baseSeed = S.seed + (S.anim !== 'none' ? Math.floor(time * 3) : 0);
+    const rng = mulberry32(baseSeed);
+    const sliceOffsets = [];
+    for (let i = 0; i < numSlices; i++) {
+        sliceOffsets.push({ dx: (rng() - 0.5) * 2 * str, channel: Math.floor(rng() * 3) });
+    }
+    for (let y = 0; y < h; y++) {
+        const sliceIdx = Math.min(Math.floor(y / sliceH), numSlices - 1);
+        const slice = sliceOffsets[sliceIdx];
+        for (let x = 0; x < w; x++) {
+            const idx = y * w + x, di = idx * 4;
+            const d = S.distField[idx], isIn = S.insideMask[idx];
+            let amt = isIn ? 0 : Math.min(1, d / soft);
+            const dx = Math.round(slice.dx * amt);
+            const sx = Math.max(0, Math.min(w - 1, x + dx));
+            const si = (y * w + sx) * 4;
+            // Shift only one channel for RGB split glitch look
+            if (slice.channel === 0) {
+                out[di] = src[(y * w + Math.max(0, Math.min(w - 1, x + dx * 1.5))) * 4];
+                out[di + 1] = src[di + 1];
+                out[di + 2] = src[si + 2];
+            } else if (slice.channel === 1) {
+                out[di] = src[si];
+                out[di + 1] = src[(y * w + Math.max(0, Math.min(w - 1, x - dx))) * 4 + 1];
+                out[di + 2] = src[si + 2];
+            } else {
+                out[di] = src[si];
+                out[di + 1] = src[si + 1];
+                out[di + 2] = src[(y * w + Math.max(0, Math.min(w - 1, x + dx * 1.3))) * 4 + 2];
+            }
+            out[di + 3] = 255;
+        }
+    }
+}
+
 function boxBlur(data, w, h, radius) {
     const out = new Uint8ClampedArray(data.length);
     const tmp = new Uint8ClampedArray(data.length);
@@ -429,13 +546,16 @@ function render(time) {
     const out = outImageData.data;
     const t = (time || 0) * S.animSpeed;
     switch (S.mode) {
-        case 'displace': applyDisplace(src,out,w,h,t); break;
-        case 'focus':    applyFocus(src,out,w,h,t); break;
-        case 'scatter':  applyScatter(src,out,w,h,t); break;
-        case 'density':  applyDensity(src,out,w,h,t); break;
-        case 'wave':     applyWave(src,out,w,h,t); break;
-        case 'shatter':  applyShatter(src,out,w,h,t); break;
-        default:         applyDisplace(src,out,w,h,t);
+        case 'displace':  applyDisplace(src,out,w,h,t); break;
+        case 'focus':     applyFocus(src,out,w,h,t); break;
+        case 'scatter':   applyScatter(src,out,w,h,t); break;
+        case 'density':   applyDensity(src,out,w,h,t); break;
+        case 'wave':      applyWave(src,out,w,h,t); break;
+        case 'shatter':   applyShatter(src,out,w,h,t); break;
+        case 'chromatic': applyChromatic(src,out,w,h,t); break;
+        case 'liquid':    applyLiquid(src,out,w,h,t); break;
+        case 'glitch':    applyGlitch(src,out,w,h,t); break;
+        default:          applyDisplace(src,out,w,h,t);
     }
     applyColorEffects(out, w, h);
     S.ctx.putImageData(outImageData, 0, 0);
@@ -458,14 +578,17 @@ function stopAnim() {
     if (animRAF) { cancelAnimationFrame(animRAF); animRAF = null; }
 }
 
-function fitCanvas() {
+function fitCanvas(resetView) {
     if (!S.canvas) return;
     const area = document.getElementById('canvas-area');
     const aW = area.clientWidth, aH = area.clientHeight;
-    if (aW<=0||aH<=0) return;
-    const s = Math.min(aW/S.W, aH/S.H) * 0.92;
-    S.canvas.style.width = Math.floor(S.W*s) + 'px';
-    S.canvas.style.height = Math.floor(S.H*s) + 'px';
+    if (aW <= 0 || aH <= 0) return;
+    const baseScale = Math.min(aW / S.W, aH / S.H) * 0.92;
+    if (resetView) { S.zoom = 1; S.panX = 0; S.panY = 0; }
+    const s = baseScale * S.zoom;
+    S.canvas.style.width = Math.floor(S.W * s) + 'px';
+    S.canvas.style.height = Math.floor(S.H * s) + 'px';
+    S.canvas.style.transform = 'translate(' + S.panX + 'px,' + S.panY + 'px)';
 }
 
 function updateStatus(msg, type) {
@@ -516,8 +639,94 @@ function bindUI() {
         updateStatus('\ucc98\ub9ac \uc911...');
         setTimeout(() => { S.lastTextKey = ''; render(0); if (S.anim !== 'none') startAnim(); updateStatus('\uc644\ub8cc!', 'success'); }, 16);
     });
-    document.getElementById('resetViewBtn').addEventListener('click', () => { fitCanvas(); if (S.sourceImg) render(0); });
+    document.getElementById('resetViewBtn').addEventListener('click', () => { fitCanvas(true); if (S.sourceImg) render(0); });
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+
+    // ── Zoom / Pan ──
+    area.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        S.zoom = Math.max(0.1, Math.min(10, S.zoom * delta));
+        fitCanvas();
+    }, { passive: false });
+    area.addEventListener('mousedown', (e) => {
+        if (e.button === 1 || (e.button === 0 && e.altKey)) {
+            e.preventDefault();
+            S.isPanning = true; S.panStartX = e.clientX - S.panX; S.panStartY = e.clientY - S.panY;
+            area.style.cursor = 'grabbing';
+        }
+    });
+    window.addEventListener('mousemove', (e) => {
+        if (!S.isPanning) return;
+        S.panX = e.clientX - S.panStartX; S.panY = e.clientY - S.panStartY;
+        fitCanvas();
+    });
+    window.addEventListener('mouseup', () => {
+        if (S.isPanning) { S.isPanning = false; area.style.cursor = ''; }
+    });
+    // Touch pinch zoom
+    let lastTouchDist = 0;
+    area.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 2) {
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            lastTouchDist = Math.sqrt(dx * dx + dy * dy);
+        }
+    }, { passive: true });
+    area.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const dx = e.touches[0].clientX - e.touches[1].clientX;
+            const dy = e.touches[0].clientY - e.touches[1].clientY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (lastTouchDist > 0) {
+                S.zoom = Math.max(0.1, Math.min(10, S.zoom * (dist / lastTouchDist)));
+                fitCanvas();
+            }
+            lastTouchDist = dist;
+        }
+    }, { passive: false });
+
+    // ── Before/After (hold Space) ──
+    document.addEventListener('keydown', (e) => {
+        if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+            e.preventDefault();
+            S.showOriginal = true;
+            if (S.sourceImg) {
+                const ctx = S.ctx;
+                ctx.drawImage(S.sourceImg, 0, 0, S.W, S.H);
+            }
+        }
+    });
+    document.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') {
+            S.showOriginal = false;
+            if (S.sourceImg) render(0);
+        }
+    });
+
+    // ── Randomize ──
+    const randBtn = document.getElementById('randomizeBtn');
+    if (randBtn) randBtn.addEventListener('click', randomizeParams);
+
+    // ── Presets ──
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const p = PRESETS[btn.dataset.preset];
+            if (!p) return;
+            applyPreset(p);
+            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        });
+    });
+
+    // ── Clipboard copy ──
+    const clipBtn = document.getElementById('clipboardBtn');
+    if (clipBtn) clipBtn.addEventListener('click', copyToClipboard);
+
+    // ── WebM export ──
+    const webmBtn = document.getElementById('saveWebmBtn');
+    if (webmBtn) webmBtn.addEventListener('click', exportWebM);
     document.getElementById('warpText').addEventListener('input', (e) => { S.text = e.target.value || 'A'; scheduleRender(); });
     document.getElementById('fontSelect').addEventListener('change', (e) => { S.font = e.target.value; scheduleRender(); });
     bindToggleGroup('.weight-btn', (btn) => { S.fontWeight = btn.dataset.weight; scheduleRender(); });
@@ -553,11 +762,125 @@ function bindUI() {
     window.addEventListener('resize', fitCanvas);
 }
 
-let renderTimeout = null;
+let renderTimeout = null, renderFullTimeout = null;
 function scheduleRender() {
     if (!S.sourceImg) return;
     clearTimeout(renderTimeout);
-    renderTimeout = setTimeout(() => { render(0); if (S.anim !== 'none') startAnim(); }, 60);
+    clearTimeout(renderFullTimeout);
+    // Quick preview (immediate feel)
+    renderTimeout = setTimeout(() => {
+        S.lastTextKey = ''; // force text mask regeneration
+        render(0);
+        if (S.anim !== 'none') startAnim();
+    }, 30);
+}
+
+function randomizeParams() {
+    const modes = ['displace','focus','scatter','density','wave','shatter','chromatic','liquid','glitch'];
+    S.mode = modes[Math.floor(Math.random() * modes.length)];
+    S.intensity = 20 + Math.floor(Math.random() * 80);
+    S.edgeSoftness = 10 + Math.floor(Math.random() * 80);
+    S.detail = 10 + Math.floor(Math.random() * 90);
+    S.seed = Math.floor(Math.random() * 999);
+    S.invert = Math.random() > 0.7;
+    const insideOpts = ['original','bright','saturate'];
+    const outsideOpts = ['original','grayscale','dark','sepia'];
+    S.insideColor = insideOpts[Math.floor(Math.random() * insideOpts.length)];
+    S.outsideColor = outsideOpts[Math.floor(Math.random() * outsideOpts.length)];
+    S.bgOpacity = Math.floor(Math.random() * 60);
+    syncUIFromState();
+    scheduleRender();
+    updateStatus('랜덤 적용!', 'success');
+}
+
+function applyPreset(p) {
+    Object.keys(p).forEach(k => { S[k] = p[k]; });
+    syncUIFromState();
+    scheduleRender();
+    updateStatus('프리셋 적용!', 'success');
+}
+
+function syncUIFromState() {
+    // Sync sliders
+    const sliderMap = {
+        'intensity':'intensity', 'edgeSoftness':'edgeSoftness', 'detail':'detail',
+        'seed':'seed', 'bgOpacity':'bgOpacity', 'animSpeed':'animSpeed',
+        'textSize':'textSize', 'textLetterSpace':'letterSpace', 'textLineHeight':'lineHeight',
+        'textX':'textX', 'textY':'textY', 'textRotation':'textRotation'
+    };
+    const valMap = {
+        'intensity':'intensityVal', 'edgeSoftness':'edgeSoftnessVal', 'detail':'detailVal',
+        'seed':'seedVal', 'bgOpacity':'bgOpacityVal', 'animSpeed':'animSpeedVal',
+        'textSize':'textSizeVal', 'textLetterSpace':'textLetterSpaceVal', 'textLineHeight':'textLineHeightVal',
+        'textX':'textXVal', 'textY':'textYVal', 'textRotation':'textRotationVal'
+    };
+    Object.keys(sliderMap).forEach(elId => {
+        const el = document.getElementById(elId);
+        if (el) { el.value = S[sliderMap[elId]]; }
+        const valEl = document.getElementById(valMap[elId]);
+        if (valEl) { valEl.textContent = S[sliderMap[elId]]; }
+    });
+    // Sync toggle groups
+    document.querySelectorAll('.mode-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === S.mode);
+    });
+    document.querySelectorAll('.invert-btn').forEach(b => {
+        b.classList.toggle('active', (b.dataset.invert === 'true') === S.invert);
+    });
+    document.querySelectorAll('.inside-color-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.color === S.insideColor);
+    });
+    document.querySelectorAll('.outside-color-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.color === S.outsideColor);
+    });
+    if (S.anim) {
+        document.querySelectorAll('.anim-btn').forEach(b => {
+            b.classList.toggle('active', b.dataset.anim === S.anim);
+        });
+    }
+}
+
+async function copyToClipboard() {
+    if (!S.sourceImg) { updateStatus('이미지를 먼저 올려주세요', 'error'); return; }
+    try {
+        const blob = await new Promise(resolve => S.canvas.toBlob(resolve, 'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+        updateStatus('클립보드에 복사 완료!', 'success');
+    } catch (e) {
+        updateStatus('클립보드 복사 실패: ' + e.message, 'error');
+    }
+}
+
+function exportWebM() {
+    if (!S.sourceImg) { updateStatus('이미지를 먼저 올려주세요', 'error'); return; }
+    const duration = 4000; // 4 seconds
+    const fps = 30;
+    const stream = S.canvas.captureStream(fps);
+    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: 5000000 });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const link = document.createElement('a');
+        link.download = 'warp-' + Date.now() + '.webm';
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        updateStatus('WebM 저장 완료!', 'success');
+    };
+    // Ensure animation is running
+    const prevAnim = S.anim;
+    if (S.anim === 'none') S.anim = 'breathe';
+    startAnim();
+    recorder.start();
+    updateStatus('녹화 중... ' + (duration / 1000) + '초', '');
+    setTimeout(() => {
+        recorder.stop();
+        stopAnim();
+        S.anim = prevAnim;
+        if (prevAnim === 'none') render(0);
+        syncUIFromState();
+    }, duration);
 }
 
 function savePNG(transparent) {
