@@ -37,6 +37,12 @@ const S = {
     anim: 'none',
     animSpeed: 1.0,
     isAnimating: false,
+    // Video
+    videoEl: null,
+    isVideo: false,
+    isPlaying: false,
+    videoDuration: 0,
+    videoTime: 0,
 };
 
 const PRESETS = {
@@ -82,7 +88,17 @@ function mulberry32(a) {
     };
 }
 
+function loadFile(file) {
+    if (file.type.startsWith('video/')) {
+        loadVideo(file);
+    } else {
+        loadImage(file);
+    }
+}
+
 function loadImage(file) {
+    stopVideo();
+    S.isVideo = false;
     const reader = new FileReader();
     reader.onload = (ev) => {
         const img = new Image();
@@ -104,11 +120,162 @@ function loadImage(file) {
             updateExportInfo();
             fitCanvas(true);
             render(0);
+            showVideoControls(false);
             updateStatus(w + '\u00d7' + h + ' loaded', 'success');
         };
         img.src = ev.target.result;
     };
     reader.readAsDataURL(file);
+}
+
+function loadVideo(file) {
+    stopVideo();
+    S.isVideo = true;
+    S.isPlaying = false;
+    if (S.videoEl) { S.videoEl.pause(); S.videoEl.src = ''; }
+    const video = document.createElement('video');
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    S.videoEl = video;
+
+    const url = URL.createObjectURL(file);
+    video.src = url;
+
+    video.onloadedmetadata = () => {
+        let w = video.videoWidth, h = video.videoHeight;
+        const maxDim = 1200; // lower for video perf
+        if (w > maxDim || h > maxDim) {
+            const r = Math.min(maxDim / w, maxDim / h);
+            w = Math.round(w * r); h = Math.round(h * r);
+        }
+        S.W = w; S.H = h;
+        S.canvas.width = w; S.canvas.height = h;
+        S.videoDuration = video.duration;
+        S.videoTime = 0;
+        S.sourceImg = video; // use video as source for Before/After
+
+        document.getElementById('canvasInfoText').textContent = w + ' \u00d7 ' + h + ' | ' + Math.round(video.duration) + 's';
+        updateExportInfo();
+        fitCanvas(true);
+        showVideoControls(true);
+
+        // Capture first frame
+        video.currentTime = 0;
+    };
+
+    video.onseeked = () => {
+        captureVideoFrame();
+    };
+
+    video.onended = () => {
+        S.isPlaying = false;
+        updatePlayBtn();
+    };
+}
+
+function captureVideoFrame() {
+    if (!S.videoEl) return;
+    const tc = document.createElement('canvas');
+    tc.width = S.W; tc.height = S.H;
+    tc.getContext('2d').drawImage(S.videoEl, 0, 0, S.W, S.H);
+    S.srcImageData = tc.getContext('2d').getImageData(0, 0, S.W, S.H);
+    render(0);
+}
+
+let videoRAF = null;
+function videoPlayLoop() {
+    if (!S.isPlaying || !S.videoEl) return;
+    captureVideoFrame();
+    // Update seek slider
+    const seekEl = document.getElementById('videoSeek');
+    if (seekEl) seekEl.value = (S.videoEl.currentTime / S.videoDuration * 100) || 0;
+    const timeEl = document.getElementById('videoTimeVal');
+    if (timeEl) timeEl.textContent = formatTime(S.videoEl.currentTime) + ' / ' + formatTime(S.videoDuration);
+    videoRAF = requestAnimationFrame(videoPlayLoop);
+}
+
+function toggleVideoPlay() {
+    if (!S.videoEl) return;
+    if (S.isPlaying) {
+        S.videoEl.pause();
+        S.isPlaying = false;
+        if (videoRAF) { cancelAnimationFrame(videoRAF); videoRAF = null; }
+    } else {
+        S.videoEl.play();
+        S.isPlaying = true;
+        videoPlayLoop();
+    }
+    updatePlayBtn();
+}
+
+function stopVideo() {
+    if (S.videoEl) { S.videoEl.pause(); S.isPlaying = false; }
+    if (videoRAF) { cancelAnimationFrame(videoRAF); videoRAF = null; }
+}
+
+function seekVideo(pct) {
+    if (!S.videoEl) return;
+    S.videoEl.currentTime = (pct / 100) * S.videoDuration;
+}
+
+function updatePlayBtn() {
+    const btn = document.getElementById('videoPlayBtn');
+    if (btn) btn.textContent = S.isPlaying ? '⏸' : '▶';
+}
+
+function showVideoControls(show) {
+    const el = document.getElementById('videoControls');
+    if (el) el.style.display = show ? '' : 'none';
+}
+
+function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return m + ':' + (sec < 10 ? '0' : '') + sec;
+}
+
+function exportProcessedVideo() {
+    if (!S.videoEl) { updateStatus('비디오를 먼저 올려주세요', 'error'); return; }
+    const fps = 30;
+    const stream = S.canvas.captureStream(fps);
+    const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: 8000000 });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const link = document.createElement('a');
+        link.download = 'distort-video-' + Date.now() + '.webm';
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        S.videoEl.pause();
+        S.isPlaying = false;
+        updatePlayBtn();
+        updateStatus('video export done!', 'success');
+    };
+
+    // Play from start and record
+    S.videoEl.currentTime = 0;
+    S.videoEl.onseeked = () => {
+        S.videoEl.onseeked = () => { captureVideoFrame(); }; // restore
+        recorder.start();
+        S.videoEl.play();
+        S.isPlaying = true;
+        updateStatus('exporting video...', '');
+
+        function recordLoop() {
+            if (S.videoEl.ended || S.videoEl.paused) {
+                recorder.stop();
+                S.isPlaying = false;
+                if (videoRAF) cancelAnimationFrame(videoRAF);
+                return;
+            }
+            captureVideoFrame();
+            requestAnimationFrame(recordLoop);
+        }
+        recordLoop();
+    };
 }
 
 function updateExportInfo() {
@@ -547,7 +714,7 @@ function applyPreset(p) {
 function bindUI() {
     // Image upload
     document.getElementById('imageInput').addEventListener('change', (e) => {
-        if (e.target.files[0]) loadImage(e.target.files[0]);
+        if (e.target.files[0]) loadFile(e.target.files[0]);
     });
     const area = document.getElementById('canvas-area');
     area.addEventListener('dragover', (e) => { e.preventDefault(); area.classList.add('drag-over'); });
@@ -555,7 +722,7 @@ function bindUI() {
     area.addEventListener('drop', (e) => {
         e.preventDefault(); area.classList.remove('drag-over');
         const file = e.dataTransfer.files[0];
-        if (file && file.type.startsWith('image/')) loadImage(file);
+        if (file && (file.type.startsWith('image/') || file.type.startsWith('video/'))) loadFile(file);
     });
 
     // Apply
@@ -596,7 +763,9 @@ function bindUI() {
         if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
             e.preventDefault();
             S.showOriginal = true;
-            if (S.sourceImg) S.ctx.drawImage(S.sourceImg, 0, 0, S.W, S.H);
+            if (S.sourceImg) {
+                S.ctx.drawImage(S.sourceImg, 0, 0, S.W, S.H);
+            }
         }
     });
     document.addEventListener('keyup', (e) => {
@@ -661,7 +830,18 @@ function bindUI() {
     const clipBtn = document.getElementById('clipboardBtn');
     if (clipBtn) clipBtn.addEventListener('click', copyToClipboard);
     const webmBtn = document.getElementById('saveWebmBtn');
-    if (webmBtn) webmBtn.addEventListener('click', exportWebM);
+    if (webmBtn) webmBtn.addEventListener('click', () => {
+        if (S.isVideo) exportProcessedVideo();
+        else exportWebM();
+    });
+
+    // Video controls
+    const playBtn = document.getElementById('videoPlayBtn');
+    if (playBtn) playBtn.addEventListener('click', toggleVideoPlay);
+    const seekEl = document.getElementById('videoSeek');
+    if (seekEl) seekEl.addEventListener('input', (e) => seekVideo(parseFloat(e.target.value)));
+    const exportVidBtn = document.getElementById('exportVideoBtn');
+    if (exportVidBtn) exportVidBtn.addEventListener('click', exportProcessedVideo);
 
     window.addEventListener('resize', () => fitCanvas());
 }
