@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Image Text Warp</title>
-    <meta name="description" content="이미지를 왜곡하여 텍스트 형태가 드러나게 하는 크리에이티브 도구">
+    <meta name="description" content="이미지를 왜곡하여 텍스트 형태가 드러나게 하는 크리에이티브 도구 — RGB Split, Liquid, Glitch 등 9가지 이펙트">
     <meta name="theme-color" content="#0a0a0c">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -37,6 +37,9 @@
                     </button>
                     <button id="themeToggle" class="btn-action" title="테마 전환" style="flex:0 0 36px; padding:8px 0">
                         <span id="themeIcon">☀</span>
+                    </button>
+                    <button id="randomizeBtn" class="btn-action" title="랜덤" style="flex:0 0 36px; padding:8px 0">
+                        🎲
                     </button>
                 </div>
 
@@ -122,6 +125,11 @@
                             <button class="toggle-btn mode-btn" data-mode="wave">WAVE</button>
                             <button class="toggle-btn mode-btn" data-mode="shatter">SHATTER</button>
                         </div>
+                        <div class="toggle-group">
+                            <button class="toggle-btn mode-btn" data-mode="chromatic">RGB SPLIT</button>
+                            <button class="toggle-btn mode-btn" data-mode="liquid">LIQUID</button>
+                            <button class="toggle-btn mode-btn" data-mode="glitch">GLITCH</button>
+                        </div>
                         <div class="row-2">
                             <div class="field">
                                 <label for="intensity">INTENSITY <span class="val" id="intensityVal">75</span>%</label>
@@ -148,6 +156,25 @@
                                 <button class="toggle-btn invert-btn active" data-invert="false">OFF</button>
                                 <button class="toggle-btn invert-btn" data-invert="true">ON</button>
                             </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- PRESETS -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>PRESETS</h2></summary>
+                    <div class="section-body">
+                        <div class="toggle-group">
+                            <button class="toggle-btn preset-btn" data-preset="cinematic">CINEMA</button>
+                            <button class="toggle-btn preset-btn" data-preset="glitch-art">GLITCH</button>
+                            <button class="toggle-btn preset-btn" data-preset="dream">DREAM</button>
+                            <button class="toggle-btn preset-btn" data-preset="split-rgb">RGB</button>
+                        </div>
+                        <div class="toggle-group">
+                            <button class="toggle-btn preset-btn" data-preset="shattered">SHATTER</button>
+                            <button class="toggle-btn preset-btn" data-preset="focus-pop">FOCUS</button>
+                            <button class="toggle-btn preset-btn" data-preset="inverted">INVERT</button>
+                            <button class="toggle-btn preset-btn" data-preset="wave-pulse">WAVE</button>
                         </div>
                     </div>
                 </details>
@@ -223,10 +250,14 @@
                             <button id="savePngBtn" class="btn-action">PNG</button>
                             <button id="saveTransBtn" class="btn-action">TRANSPARENT</button>
                         </div>
+                        <div class="row-2">
+                            <button id="clipboardBtn" class="btn-action">📋 COPY</button>
+                            <button id="saveWebmBtn" class="btn-action">🎬 WEBM</button>
+                        </div>
                     </div>
                 </details>
 
-                <p id="status" class="status-msg" role="status">사진을 올리고 APPLY</p>
+                <p id="status" class="status-msg" role="status">사진을 올리고 APPLY · Space=비교 · Alt+드래그=이동 · 스크롤=줌</p>
                 <div class="safe-bottom"></div>
             </div>
         </section>
