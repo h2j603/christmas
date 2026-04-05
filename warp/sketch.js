@@ -14,22 +14,22 @@ const S = {
     processed: null,
     mode: 'displace',
     text: 'WARP',
-    font: "'Black Han Sans', sans-serif",
+    font: "kozuka-mincho-pr6n, serif",
     fontWeight: '700',
     textSize: 50,
     textX: 50, textY: 50,
     letterSpace: 0,
     lineHeight: 120,
     textRotation: 0,
-    intensity: 75,
+    intensity: 85,
     edgeSoftness: 40,
     detail: 50,
     seed: 0,
     invert: false,
     insideColor: 'original',
-    outsideColor: 'dark',
+    outsideColor: 'original',
     bgColor: '#0a0a0c',
-    bgOpacity: 30,
+    bgOpacity: 0,
     anim: 'none',
     animSpeed: 1.0,
     exportScale: 1,
@@ -49,14 +49,14 @@ const S = {
 
 // ── Presets ──
 const PRESETS = {
-    'cinematic': { mode:'displace', intensity:60, edgeSoftness:55, detail:40, outsideColor:'dark', insideColor:'bright', bgOpacity:40, invert:false },
-    'glitch-art': { mode:'glitch', intensity:80, edgeSoftness:30, detail:70, outsideColor:'original', insideColor:'original', bgOpacity:10, invert:false },
-    'dream': { mode:'liquid', intensity:50, edgeSoftness:70, detail:60, outsideColor:'sepia', insideColor:'saturate', bgOpacity:20, invert:false },
-    'split-rgb': { mode:'chromatic', intensity:70, edgeSoftness:45, detail:50, outsideColor:'dark', insideColor:'original', bgOpacity:25, invert:false },
-    'shattered': { mode:'shatter', intensity:85, edgeSoftness:20, detail:80, outsideColor:'grayscale', insideColor:'bright', bgOpacity:35, invert:false },
-    'focus-pop': { mode:'focus', intensity:90, edgeSoftness:50, detail:50, outsideColor:'grayscale', insideColor:'saturate', bgOpacity:0, invert:false },
-    'inverted': { mode:'displace', intensity:70, edgeSoftness:40, detail:50, outsideColor:'original', insideColor:'dark', bgOpacity:20, invert:true },
-    'wave-pulse': { mode:'wave', intensity:65, edgeSoftness:50, detail:55, outsideColor:'dark', insideColor:'original', bgOpacity:30, anim:'pulse-wave', animSpeed:1.2, invert:false },
+    'cinematic': { mode:'displace', intensity:80, edgeSoftness:55, detail:40, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
+    'glitch-art': { mode:'glitch', intensity:90, edgeSoftness:30, detail:70, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
+    'dream': { mode:'liquid', intensity:70, edgeSoftness:70, detail:60, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
+    'split-rgb': { mode:'chromatic', intensity:85, edgeSoftness:45, detail:50, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
+    'shattered': { mode:'shatter', intensity:90, edgeSoftness:20, detail:80, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
+    'focus-pop': { mode:'focus', intensity:95, edgeSoftness:50, detail:50, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
+    'inverted': { mode:'displace', intensity:80, edgeSoftness:40, detail:50, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:true },
+    'wave-pulse': { mode:'wave', intensity:75, edgeSoftness:50, detail:55, outsideColor:'original', insideColor:'original', bgOpacity:0, anim:'pulse-wave', animSpeed:1.2, invert:false },
 };
 
 function init() {
@@ -216,25 +216,24 @@ function buildDistanceField(w, h) {
 }
 
 function applyDisplace(src, out, w, h, time) {
-    const strength = (S.intensity / 100) * 120;
-    const softness = Math.max(1, (S.edgeSoftness / 100) * Math.min(w,h) * 0.25);
+    const strength = (S.intensity / 100) * 200;
+    const softness = Math.max(1, (S.edgeSoftness / 100) * Math.min(w,h) * 0.3);
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const idx = y * w + x;
             const d = S.distField[idx], isIn = S.insideMask[idx];
             let dx = 0, dy = 0;
-            if (!isIn && d < softness) {
-                const f = (1 - d / softness) * strength;
+            if (!isIn) {
+                const t = Math.min(1, d / softness);
+                const ramp = 0.3 + t * 0.7; // starts strong even near edge
+                const f = ramp * strength;
                 const tcx = (S.textX / 100) * w, tcy = (S.textY / 100) * h;
                 const ax = x - tcx, ay = y - tcy;
                 const len = Math.sqrt(ax*ax + ay*ay) || 1;
-                dx = (ax/len)*f + Math.sin(y*0.04 + time*1.5)*f*0.3;
-                dy = (ay/len)*f + Math.cos(x*0.04 + time*1.5)*f*0.3;
-            } else if (isIn) {
-                const f = strength * 0.12;
-                dx = Math.sin(x*0.015 + y*0.008 + time*1.2)*f;
-                dy = Math.cos(y*0.015 + x*0.008 + time*1.2)*f;
+                dx = (ax/len)*f + Math.sin(y*0.04 + time*1.5)*f*0.4;
+                dy = (ay/len)*f + Math.cos(x*0.04 + time*1.5)*f*0.4;
             }
+            // inside: dx=0, dy=0 → original pixels untouched
             const sx = Math.max(0, Math.min(w-1, x+dx+0.5|0));
             const sy = Math.max(0, Math.min(h-1, y+dy+0.5|0));
             const si = (sy*w+sx)*4, di = idx*4;
@@ -244,15 +243,16 @@ function applyDisplace(src, out, w, h, time) {
 }
 
 function applyFocus(src, out, w, h, time) {
-    const blurR = Math.max(1, Math.round((S.intensity/100)*30));
-    const soft = Math.max(1, (S.edgeSoftness/100)*Math.min(w,h)*0.2);
+    const blurR = Math.max(2, Math.round((S.intensity/100)*50));
+    const soft = Math.max(1, (S.edgeSoftness/100)*Math.min(w,h)*0.25);
     const blurred = boxBlur(src, w, h, blurR);
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const idx = y*w+x, di = idx*4;
-            const d = S.distField[idx], isIn = S.insideMask[idx];
+            const isIn = S.insideMask[idx], d = S.distField[idx];
             let t = isIn ? 0 : Math.min(1, d/soft);
-            t = t*t;
+            t = 0.3 + t * 0.7; // strong blur even near edge
+            if (isIn) t = 0; // inside perfectly sharp
             if (S.anim==='breathe') t *= 0.7 + 0.3*Math.sin(time*2);
             out[di]  = src[di]*(1-t)  + blurred[di]*t;
             out[di+1]= src[di+1]*(1-t)+ blurred[di+1]*t;
@@ -263,8 +263,8 @@ function applyFocus(src, out, w, h, time) {
 }
 
 function applyScatter(src, out, w, h, time) {
-    const str = (S.intensity/100)*90;
-    const soft = Math.max(1, (S.edgeSoftness/100)*Math.min(w,h)*0.25);
+    const str = (S.intensity/100)*150;
+    const soft = Math.max(1, (S.edgeSoftness/100)*Math.min(w,h)*0.3);
     const baseSeed = S.seed + Math.floor(time * 2);
     const frac = (time * 2) % 1;
     const rng1 = mulberry32(baseSeed), rng2 = mulberry32(baseSeed + 1);
@@ -278,7 +278,7 @@ function applyScatter(src, out, w, h, time) {
         for (let x=0;x<w;x++) {
             const idx=y*w+x, di=idx*4;
             const d=S.distField[idx], isIn=S.insideMask[idx];
-            let scatter = isIn ? 0 : Math.min(1, d/soft) * str;
+            let scatter = isIn ? 0 : (0.3 + Math.min(1, d/soft)*0.7) * str;
             if (S.anim==='glitch') scatter *= 0.6 + 0.4*Math.abs(Math.sin(time*4 + y*0.008));
             const rx = rX1[idx]*(1-frac) + rX2[idx]*frac;
             const ry = rY1[idx]*(1-frac) + rY2[idx]*frac;
@@ -324,14 +324,14 @@ function applyDensity(src, out, w, h, time) {
 }
 
 function applyWave(src, out, w, h, time) {
-    const str = (S.intensity/100)*80;
+    const str = (S.intensity/100)*160;
     const freq = 0.01 + (S.detail/100)*0.08;
-    const soft = Math.max(1, (S.edgeSoftness/100)*Math.min(w,h)*0.25);
+    const soft = Math.max(1, (S.edgeSoftness/100)*Math.min(w,h)*0.3);
     for (let y=0;y<h;y++) {
         for (let x=0;x<w;x++) {
             const idx=y*w+x, di=idx*4;
             const d=S.distField[idx], isIn=S.insideMask[idx];
-            const waveAmt = isIn ? 0 : Math.min(1, d/soft);
+            const waveAmt = isIn ? 0 : (0.3 + Math.min(1, d/soft)*0.7);
             const wave = waveAmt * str;
             const dx = Math.sin(y*freq + d*0.04 + time*2) * wave;
             const dy = Math.cos(x*freq + d*0.04 + time*2) * wave;
@@ -344,8 +344,8 @@ function applyWave(src, out, w, h, time) {
 }
 
 function applyShatter(src, out, w, h, time) {
-    const str = (S.intensity/100)*70;
-    const soft = Math.max(1, (S.edgeSoftness/100)*Math.min(w,h)*0.15);
+    const str = (S.intensity/100)*140;
+    const soft = Math.max(1, (S.edgeSoftness/100)*Math.min(w,h)*0.2);
     const rng = mulberry32(S.seed);
     const numCells = 30 + Math.round((S.detail/100)*150);
     const cells = [];
@@ -359,7 +359,7 @@ function applyShatter(src, out, w, h, time) {
                 const cd=(x-cells[c].x)**2+(y-cells[c].y)**2;
                 if (cd<minD){minD=cd;nearest=c;}
             }
-            let amt = isIn ? 0 : Math.min(1, d/soft);
+            let amt = isIn ? 0 : (0.3 + Math.min(1, d/soft)*0.7);
             if (S.anim==='pulse-wave') amt *= 0.5 + 0.5*Math.sin(time*1.5 + d*0.015);
             const cell=cells[nearest];
             const sx = Math.max(0, Math.min(w-1, x+cell.dx*amt+0.5|0));
@@ -372,13 +372,13 @@ function applyShatter(src, out, w, h, time) {
 
 // ── NEW EFFECT: Chromatic Aberration ──
 function applyChromatic(src, out, w, h, time) {
-    const str = (S.intensity / 100) * 40;
-    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.25);
+    const str = (S.intensity / 100) * 80;
+    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.3);
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const idx = y * w + x, di = idx * 4;
             const d = S.distField[idx], isIn = S.insideMask[idx];
-            let amt = isIn ? 0 : Math.min(1, d / soft) * str;
+            let amt = isIn ? 0 : (0.3 + Math.min(1, d / soft) * 0.7) * str;
             if (S.anim !== 'none') amt *= 0.7 + 0.3 * Math.sin(time * 2 + d * 0.01);
             const angle = Math.atan2(y - (S.textY / 100) * h, x - (S.textX / 100) * w);
             const rOx = Math.round(Math.cos(angle) * amt);
@@ -399,17 +399,16 @@ function applyChromatic(src, out, w, h, time) {
 
 // ── NEW EFFECT: Liquid Warp (Perlin-like noise displacement) ──
 function applyLiquid(src, out, w, h, time) {
-    const str = (S.intensity / 100) * 100;
-    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.25);
+    const str = (S.intensity / 100) * 180;
+    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.3);
     const freq = 0.003 + (S.detail / 100) * 0.015;
     const rng = mulberry32(S.seed);
-    // Simple layered noise for organic feel
     const phaseX = rng() * 1000, phaseY = rng() * 1000;
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const idx = y * w + x, di = idx * 4;
             const d = S.distField[idx], isIn = S.insideMask[idx];
-            let amt = isIn ? 0.05 : Math.min(1, d / soft);
+            let amt = isIn ? 0 : (0.3 + Math.min(1, d / soft) * 0.7);
             amt *= str;
             if (S.anim !== 'none') {
                 amt *= 0.6 + 0.4 * Math.sin(time * 1.5 + x * 0.003 + y * 0.002);
@@ -430,8 +429,8 @@ function applyLiquid(src, out, w, h, time) {
 
 // ── NEW EFFECT: Glitch Slice ──
 function applyGlitch(src, out, w, h, time) {
-    const str = (S.intensity / 100) * 80;
-    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.2);
+    const str = (S.intensity / 100) * 160;
+    const soft = Math.max(1, (S.edgeSoftness / 100) * Math.min(w, h) * 0.3);
     const numSlices = 5 + Math.round((S.detail / 100) * 40);
     const sliceH = Math.ceil(h / numSlices);
     const baseSeed = S.seed + (S.anim !== 'none' ? Math.floor(time * 3) : 0);
@@ -446,7 +445,11 @@ function applyGlitch(src, out, w, h, time) {
         for (let x = 0; x < w; x++) {
             const idx = y * w + x, di = idx * 4;
             const d = S.distField[idx], isIn = S.insideMask[idx];
-            let amt = isIn ? 0 : Math.min(1, d / soft);
+            if (isIn) {
+                out[di] = src[di]; out[di+1] = src[di+1]; out[di+2] = src[di+2]; out[di+3] = 255;
+                continue;
+            }
+            let amt = 0.3 + Math.min(1, d / soft) * 0.7;
             const dx = Math.round(slice.dx * amt);
             const sx = Math.max(0, Math.min(w - 1, x + dx));
             const si = (y * w + sx) * 4;
@@ -783,11 +786,9 @@ function randomizeParams() {
     S.detail = 10 + Math.floor(Math.random() * 90);
     S.seed = Math.floor(Math.random() * 999);
     S.invert = Math.random() > 0.7;
-    const insideOpts = ['original','bright','saturate'];
-    const outsideOpts = ['original','grayscale','dark','sepia'];
-    S.insideColor = insideOpts[Math.floor(Math.random() * insideOpts.length)];
-    S.outsideColor = outsideOpts[Math.floor(Math.random() * outsideOpts.length)];
-    S.bgOpacity = Math.floor(Math.random() * 60);
+    S.insideColor = 'original';
+    S.outsideColor = 'original';
+    S.bgOpacity = 0;
     syncUIFromState();
     scheduleRender();
     updateStatus('랜덤 적용!', 'success');
