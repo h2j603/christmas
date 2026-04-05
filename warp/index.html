@@ -28,9 +28,9 @@
                 <div class="quick-actions">
                     <label for="imageInput" class="btn-action upload-btn" tabindex="0" role="button">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 5L7 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                        PHOTO
+                        MEDIA
                     </label>
-                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif">
+                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,video/avi">
                     <button id="applyBtn" class="btn-action primary">APPLY</button>
                     <button id="resetViewBtn" class="btn-action" title="뷰 리셋" style="flex:0 0 36px; padding:8px 0">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 2v5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 9.5a6 6 0 1 0 1.3-4L2 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -41,6 +41,20 @@
                     <button id="randomizeBtn" class="btn-action" title="랜덤" style="flex:0 0 36px; padding:8px 0">
                         🎲
                     </button>
+                </div>
+
+                <!-- Video Controls (hidden until video loaded) -->
+                <div id="videoControls" class="section-collapsible" style="display:none; padding:10px 12px;">
+                    <div class="quick-actions" style="margin-bottom:6px">
+                        <button id="videoPlayBtn" class="btn-action" style="flex:0 0 40px; font-size:14px; padding:8px 0">▶</button>
+                        <div class="field" style="flex:1; margin:0">
+                            <input type="range" id="videoSeek" min="0" max="100" value="0" step="0.1">
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between">
+                        <span id="videoTimeVal" style="font-family:var(--font-mono); font-size:9px; color:var(--text-3)">0:00 / 0:00</span>
+                        <button id="exportVideoBtn" class="btn-action" style="flex:0; padding:6px 12px; font-size:9px">🎬 EXPORT VIDEO</button>
+                    </div>
                 </div>
 
                 <a href="../" class="tool-nav-link">
@@ -220,7 +234,7 @@
                     </div>
                 </details>
 
-                <p id="status" class="status-msg" role="status">이미지를 올리고 APPLY · Space=비교 · 스크롤=줌</p>
+                <p id="status" class="status-msg" role="status">이미지/비디오를 올리고 APPLY · Space=비교 · 스크롤=줌</p>
                 <div class="safe-bottom"></div>
             </div>
         </section>
