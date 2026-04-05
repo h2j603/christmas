@@ -61,14 +61,16 @@
                             <div class="field">
                                 <label for="fontSelect">FONT</label>
                                 <select id="fontSelect">
-                                    <option value="'Black Han Sans', sans-serif" selected>블랙한산스</option>
+                                    <option value="kozuka-mincho-pr6n, serif" selected>Kozuka Mincho</option>
                                     <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
                                     <option value="'Noto Serif KR', serif">Noto Serif KR</option>
-                                    <option value="sans-serif">Sans-serif</option>
+                                    <option value="'Black Han Sans', sans-serif">블랙한산스</option>
+                                    <option value="'SunBatang', serif">순바탕</option>
                                     <option value="serif">Serif</option>
-                                    <option value="'JetBrains Mono', monospace">Monospace</option>
+                                    <option value="sans-serif">Sans-serif</option>
+                                    <option value="monospace">Monospace</option>
                                     <option value="Georgia, serif">Georgia</option>
-                                    <option value="Impact, sans-serif">Impact</option>
+                                    <option value="'Courier New', monospace">Courier New</option>
                                 </select>
                             </div>
                             <div class="field">
@@ -132,8 +134,8 @@
                         </div>
                         <div class="row-2">
                             <div class="field">
-                                <label for="intensity">INTENSITY <span class="val" id="intensityVal">75</span>%</label>
-                                <input type="range" id="intensity" min="0" max="100" value="75">
+                                <label for="intensity">INTENSITY <span class="val" id="intensityVal">85</span>%</label>
+                                <input type="range" id="intensity" min="0" max="100" value="85">
                             </div>
                             <div class="field">
                                 <label for="edgeSoftness">EDGE <span class="val" id="edgeSoftnessVal">40</span>%</label>
@@ -194,9 +196,9 @@
                         <div class="field">
                             <label>OUTSIDE</label>
                             <div class="toggle-group">
-                                <button class="toggle-btn outside-color-btn" data-color="original">ORIG</button>
+                                <button class="toggle-btn outside-color-btn active" data-color="original">ORIG</button>
                                 <button class="toggle-btn outside-color-btn" data-color="grayscale">GRAY</button>
-                                <button class="toggle-btn outside-color-btn active" data-color="dark">DARK</button>
+                                <button class="toggle-btn outside-color-btn" data-color="dark">DARK</button>
                                 <button class="toggle-btn outside-color-btn" data-color="sepia">SEPIA</button>
                             </div>
                         </div>
@@ -206,8 +208,8 @@
                                 <input type="color" id="bgColor" value="#0a0a0c">
                             </div>
                             <div class="field">
-                                <label for="bgOpacity">BG MIX <span class="val" id="bgOpacityVal">30</span>%</label>
-                                <input type="range" id="bgOpacity" min="0" max="100" value="30">
+                                <label for="bgOpacity">BG MIX <span class="val" id="bgOpacityVal">0</span>%</label>
+                                <input type="range" id="bgOpacity" min="0" max="100" value="0">
                             </div>
                         </div>
                     </div>
