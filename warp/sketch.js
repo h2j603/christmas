@@ -1,62 +1,51 @@
 /* ═══════════════════════════════════
-   IMAGE TEXT WARP v3 — Optimized Engine
-   New effects, presets, zoom/pan, clipboard, WebM export
+   IMAGE DISTORT — Color Separation Engine
+   Threshold · Color Map · Posterize · Grain
    ═══════════════════════════════════ */
 
-// ── State ──
 const S = {
     canvas: null, ctx: null,
     W: 800, H: 600,
     sourceImg: null,
-    textMask: null,
-    distField: null,
-    insideMask: null,
-    processed: null,
-    mode: 'displace',
-    text: 'WARP',
-    font: "kozuka-mincho-pr6n, serif",
-    fontWeight: '700',
-    textSize: 50,
-    textX: 50, textY: 50,
-    letterSpace: 0,
-    lineHeight: 120,
-    textRotation: 0,
-    intensity: 85,
-    edgeSoftness: 40,
-    detail: 50,
-    seed: 0,
-    invert: false,
-    insideColor: 'original',
-    outsideColor: 'original',
-    bgColor: '#0a0a0c',
-    bgOpacity: 0,
-    anim: 'none',
-    animSpeed: 1.0,
-    exportScale: 1,
-    isAnimating: false,
-    needsRender: true,
     srcImageData: null,
-    srcW: 0, srcH: 0,
-    lastTextKey: '',
-    // v3: zoom/pan
+    // Threshold
+    threshold: 50,
+    channel: 'luma', // luma, r, g, b, saturation
+    preBlur: 3,
+    levels: 2,       // posterize levels (2=binary, 3-8=multi)
+    // Color mapping
+    colorLow: '#3030ff',
+    colorMid: '#888888',
+    colorHigh: '#d0d0d0',
+    mixMode: 'flat',  // flat, tint, multiply
+    // Post FX
+    brightness: 0,
+    contrast: 0,
+    saturation: 30,
+    grain: 5,
+    edgeGlow: 0,
+    // Region
+    invert: false,
+    // View
     zoom: 1, panX: 0, panY: 0,
     isPanning: false, panStartX: 0, panStartY: 0,
-    // v3: before/after
     showOriginal: false,
-    // v3: half-res preview
-    previewScale: 1,
+    exportScale: 1,
+    // Anim
+    anim: 'none',
+    animSpeed: 1.0,
+    isAnimating: false,
 };
 
-// ── Presets ──
 const PRESETS = {
-    'cinematic': { mode:'displace', intensity:80, edgeSoftness:55, detail:40, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
-    'glitch-art': { mode:'glitch', intensity:90, edgeSoftness:30, detail:70, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
-    'dream': { mode:'liquid', intensity:70, edgeSoftness:70, detail:60, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
-    'split-rgb': { mode:'chromatic', intensity:85, edgeSoftness:45, detail:50, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
-    'shattered': { mode:'shatter', intensity:90, edgeSoftness:20, detail:80, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
-    'focus-pop': { mode:'focus', intensity:95, edgeSoftness:50, detail:50, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:false },
-    'inverted': { mode:'displace', intensity:80, edgeSoftness:40, detail:50, outsideColor:'original', insideColor:'original', bgOpacity:0, invert:true },
-    'wave-pulse': { mode:'wave', intensity:75, edgeSoftness:50, detail:55, outsideColor:'original', insideColor:'original', bgOpacity:0, anim:'pulse-wave', animSpeed:1.2, invert:false },
+    'blueprint': { threshold:50, channel:'luma', preBlur:3, levels:2, colorLow:'#3030ff', colorHigh:'#d0d0d0', mixMode:'flat', saturation:30, grain:5, contrast:10, edgeGlow:0 },
+    'noir': { threshold:50, channel:'luma', preBlur:2, levels:2, colorLow:'#000000', colorHigh:'#ffffff', mixMode:'flat', saturation:0, grain:15, contrast:20, edgeGlow:0 },
+    'thermal': { threshold:40, channel:'luma', preBlur:4, levels:4, colorLow:'#1a0a3e', colorMid:'#ff4400', colorHigh:'#ffff00', mixMode:'flat', saturation:40, grain:3, contrast:0, edgeGlow:5 },
+    'pop-art': { threshold:45, channel:'luma', preBlur:2, levels:3, colorLow:'#ff0066', colorMid:'#ffcc00', colorHigh:'#ffffff', mixMode:'flat', saturation:60, grain:0, contrast:30, edgeGlow:0 },
+    'xray': { threshold:55, channel:'luma', preBlur:5, levels:2, colorLow:'#000020', colorHigh:'#88ccff', mixMode:'flat', saturation:10, grain:8, contrast:15, edgeGlow:10 },
+    'solarize': { threshold:50, channel:'luma', preBlur:1, levels:6, colorLow:'#ff2200', colorMid:'#ffaa00', colorHigh:'#00ffaa', mixMode:'tint', saturation:50, grain:2, contrast:20, edgeGlow:3 },
+    'duotone-warm': { threshold:50, channel:'luma', preBlur:3, levels:2, colorLow:'#cc3300', colorHigh:'#ffddaa', mixMode:'flat', saturation:20, grain:5, contrast:10, edgeGlow:0 },
+    'retro-screen': { threshold:50, channel:'luma', preBlur:6, levels:3, colorLow:'#003322', colorMid:'#00aa66', colorHigh:'#88ffcc', mixMode:'flat', saturation:15, grain:20, contrast:5, edgeGlow:0 },
 };
 
 function init() {
@@ -65,12 +54,10 @@ function init() {
     S.canvas.height = S.H;
     S.ctx = S.canvas.getContext('2d', { willReadFrequently: true });
     document.getElementById('canvas-container').appendChild(S.canvas);
-    S.textMask = document.createElement('canvas');
-    S.processed = document.createElement('canvas');
     bindUI();
     initTheme();
     drawPlaceholder();
-    fitCanvas();
+    fitCanvas(true);
 }
 
 function drawPlaceholder() {
@@ -99,27 +86,23 @@ function loadImage(file) {
         const img = new Image();
         img.onload = () => {
             S.sourceImg = img;
-            let w = img.naturalWidth;
-            let h = img.naturalHeight;
+            let w = img.naturalWidth, h = img.naturalHeight;
             const maxDim = 2400;
             if (w > maxDim || h > maxDim) {
-                const ratio = Math.min(maxDim / w, maxDim / h);
-                w = Math.round(w * ratio);
-                h = Math.round(h * ratio);
+                const r = Math.min(maxDim / w, maxDim / h);
+                w = Math.round(w * r); h = Math.round(h * r);
             }
             S.W = w; S.H = h;
             S.canvas.width = w; S.canvas.height = h;
-            S.processed.width = w; S.processed.height = h;
-            const pCtx = S.processed.getContext('2d');
-            pCtx.drawImage(img, 0, 0, w, h);
-            S.srcImageData = pCtx.getImageData(0, 0, w, h);
-            S.srcW = w; S.srcH = h;
-            S.lastTextKey = '';
+            const tc = document.createElement('canvas');
+            tc.width = w; tc.height = h;
+            tc.getContext('2d').drawImage(img, 0, 0, w, h);
+            S.srcImageData = tc.getContext('2d').getImageData(0, 0, w, h);
             document.getElementById('canvasInfoText').textContent = w + ' \u00d7 ' + h;
             updateExportInfo();
-            fitCanvas();
+            fitCanvas(true);
             render(0);
-            updateStatus(w + '\u00d7' + h + ' \ub85c\ub4dc \uc644\ub8cc', 'success');
+            updateStatus(w + '\u00d7' + h + ' loaded', 'success');
         };
         img.src = ev.target.result;
     };
@@ -128,449 +111,228 @@ function loadImage(file) {
 
 function updateExportInfo() {
     const el = document.getElementById('exportInfo');
-    if (!el) return;
-    el.textContent = (S.W * S.exportScale) + ' \u00d7 ' + (S.H * S.exportScale) + 'px';
+    if (el) el.textContent = (S.W * S.exportScale) + ' \u00d7 ' + (S.H * S.exportScale) + 'px';
 }
 
-function getTextKey() {
-    return [S.text, S.font, S.fontWeight, S.textSize, S.textX, S.textY,
-            S.letterSpace, S.lineHeight, S.textRotation, S.W, S.H, S.invert].join('|');
-}
-
-function generateTextMask(w, h) {
-    const key = getTextKey();
-    if (key === S.lastTextKey && S.distField) return;
-    S.lastTextKey = key;
-    S.textMask.width = w; S.textMask.height = h;
-    const ctx = S.textMask.getContext('2d');
-    ctx.clearRect(0, 0, w, h);
-    const fontSize = (S.textSize / 100) * Math.min(w, h);
-    ctx.save();
-    const cx = (S.textX / 100) * w;
-    const cy = (S.textY / 100) * h;
-    if (S.textRotation !== 0) {
-        ctx.translate(cx, cy);
-        ctx.rotate(S.textRotation * Math.PI / 180);
-        ctx.translate(-cx, -cy);
-    }
-    ctx.fillStyle = '#fff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.font = S.fontWeight + ' ' + fontSize + 'px ' + S.font;
-    const lines = S.text.split('\n');
-    const lineH = fontSize * (S.lineHeight / 100);
-    const totalH = lines.length * lineH;
-    const startY = cy - totalH / 2 + lineH / 2;
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (S.letterSpace !== 0 && line.length > 0) {
-            const chars = [...line];
-            const spacing = S.letterSpace * (fontSize / 50);
-            const totalW = chars.reduce((sum, ch) => sum + ctx.measureText(ch).width, 0) + spacing * (chars.length - 1);
-            let x = cx - totalW / 2;
-            for (const ch of chars) {
-                const cw = ctx.measureText(ch).width;
-                ctx.fillText(ch, x + cw / 2, startY + i * lineH);
-                x += cw + spacing;
-            }
-        } else {
-            ctx.fillText(line, cx, startY + i * lineH);
-        }
-    }
-    ctx.restore();
-    buildDistanceField(w, h);
-}
-
-function buildDistanceField(w, h) {
-    const maskData = S.textMask.getContext('2d').getImageData(0, 0, w, h).data;
-    const inside = new Uint8Array(w * h);
-    for (let i = 0; i < w * h; i++) {
-        let isIn = maskData[i * 4 + 3] > 128 ? 1 : 0;
-        if (S.invert) isIn = isIn ? 0 : 1;
-        inside[i] = isIn;
-    }
-    // Higher resolution distance field (2x downscale instead of 4x)
-    const scale = 2;
-    const sw = Math.ceil(w / scale), sh = Math.ceil(h / scale);
-    const smallInside = new Uint8Array(sw * sh);
-    for (let y = 0; y < sh; y++)
-        for (let x = 0; x < sw; x++)
-            smallInside[y * sw + x] = inside[Math.min(y * scale, h - 1) * w + Math.min(x * scale, w - 1)];
-    const dist = new Float32Array(sw * sh);
-    const INF = 1e6;
-    for (let i = 0; i < sw * sh; i++) dist[i] = smallInside[i] ? 0 : INF;
-    for (let y = 1; y < sh - 1; y++)
-        for (let x = 1; x < sw - 1; x++) {
-            const i = y * sw + x;
-            dist[i] = Math.min(dist[i], dist[(y-1)*sw+(x-1)]+1.414, dist[(y-1)*sw+x]+1, dist[(y-1)*sw+(x+1)]+1.414, dist[y*sw+(x-1)]+1);
-        }
-    for (let y = sh - 2; y >= 1; y--)
-        for (let x = sw - 2; x >= 1; x--) {
-            const i = y * sw + x;
-            dist[i] = Math.min(dist[i], dist[(y+1)*sw+(x+1)]+1.414, dist[(y+1)*sw+x]+1, dist[(y+1)*sw+(x-1)]+1.414, dist[y*sw+(x+1)]+1);
-        }
-    S.distField = new Float32Array(w * h);
-    S.insideMask = inside;
-    for (let y = 0; y < h; y++)
-        for (let x = 0; x < w; x++)
-            S.distField[y * w + x] = dist[Math.min(Math.floor(y / scale), sh - 1) * sw + Math.min(Math.floor(x / scale), sw - 1)] * scale;
-}
-
-// Edge curve: strongest near text boundary, fades outward
-// d = distance from text edge, zone = falloff range
-// Returns 0..1 where 1 = max distortion (at boundary)
-function edgeCurve(d, zone) {
-    if (d <= 0) return 1;
-    if (d >= zone) return 0.15; // distant pixels still get some warp
-    const t = d / zone;
-    // Inverse exponential: explodes near boundary, fades out
-    return Math.max(0.15, 1 - t * t);
-}
-
-function applyDisplace(src, out, w, h, time) {
-    const strength = (S.intensity / 100) * 250;
-    const zone = Math.max(4, (S.edgeSoftness / 100) * Math.min(w,h) * 0.35);
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            const idx = y * w + x;
-            const d = S.distField[idx], isIn = S.insideMask[idx];
-            let dx = 0, dy = 0;
-            if (!isIn) {
-                const f = edgeCurve(d, zone) * strength;
-                const tcx = (S.textX / 100) * w, tcy = (S.textY / 100) * h;
-                const ax = x - tcx, ay = y - tcy;
-                const len = Math.sqrt(ax*ax + ay*ay) || 1;
-                dx = (ax/len)*f + Math.sin(y*0.04 + time*1.5)*f*0.5;
-                dy = (ay/len)*f + Math.cos(x*0.04 + time*1.5)*f*0.5;
-            }
-            const sx = Math.max(0, Math.min(w-1, x+dx+0.5|0));
-            const sy = Math.max(0, Math.min(h-1, y+dy+0.5|0));
-            const si = (sy*w+sx)*4, di = idx*4;
-            out[di]=src[si]; out[di+1]=src[si+1]; out[di+2]=src[si+2]; out[di+3]=src[si+3];
-        }
-    }
-}
-
-function applyFocus(src, out, w, h, time) {
-    const blurR = Math.max(3, Math.round((S.intensity/100)*60));
-    const zone = Math.max(4, (S.edgeSoftness/100)*Math.min(w,h)*0.3);
-    const blurred = boxBlur(src, w, h, blurR);
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            const idx = y*w+x, di = idx*4;
-            const isIn = S.insideMask[idx], d = S.distField[idx];
-            let t = isIn ? 0 : edgeCurve(d, zone);
-            if (S.anim==='breathe') t *= 0.7 + 0.3*Math.sin(time*2);
-            out[di]  = src[di]*(1-t)  + blurred[di]*t;
-            out[di+1]= src[di+1]*(1-t)+ blurred[di+1]*t;
-            out[di+2]= src[di+2]*(1-t)+ blurred[di+2]*t;
-            out[di+3]= 255;
-        }
-    }
-}
-
-function applyScatter(src, out, w, h, time) {
-    const str = (S.intensity/100)*200;
-    const zone = Math.max(4, (S.edgeSoftness/100)*Math.min(w,h)*0.35);
-    const baseSeed = S.seed + Math.floor(time * 2);
-    const frac = (time * 2) % 1;
-    const rng1 = mulberry32(baseSeed), rng2 = mulberry32(baseSeed + 1);
-    const rX1 = new Float32Array(w*h), rY1 = new Float32Array(w*h);
-    const rX2 = new Float32Array(w*h), rY2 = new Float32Array(w*h);
-    for (let i=0;i<w*h;i++) {
-        rX1[i]=(rng1()-0.5)*2; rY1[i]=(rng1()-0.5)*2;
-        rX2[i]=(rng2()-0.5)*2; rY2[i]=(rng2()-0.5)*2;
-    }
-    for (let y=0;y<h;y++) {
-        for (let x=0;x<w;x++) {
-            const idx=y*w+x, di=idx*4;
-            const d=S.distField[idx], isIn=S.insideMask[idx];
-            let scatter = isIn ? 0 : edgeCurve(d, zone) * str;
-            if (S.anim==='glitch') scatter *= 0.6 + 0.4*Math.abs(Math.sin(time*4 + y*0.008));
-            const rx = rX1[idx]*(1-frac) + rX2[idx]*frac;
-            const ry = rY1[idx]*(1-frac) + rY2[idx]*frac;
-            const sx = Math.max(0, Math.min(w-1, x+rx*scatter+0.5|0));
-            const sy = Math.max(0, Math.min(h-1, y+ry*scatter+0.5|0));
-            const si=(sy*w+sx)*4;
-            out[di]=src[si]; out[di+1]=src[si+1]; out[di+2]=src[si+2]; out[di+3]=src[si+3];
-        }
-    }
-}
-
-function applyDensity(src, out, w, h, time) {
-    const gridBase = Math.max(2, Math.round(3 + (100-S.detail)/100*30));
-    const zone = Math.max(4, (S.edgeSoftness/100)*Math.min(w,h)*0.3);
-    const intF = S.intensity/100;
-    for (let i=0;i<w*h*4;i+=4) { out[i]=out[i+1]=out[i+2]=0; out[i+3]=255; }
-    for (let gy=0; gy<h; gy+=gridBase) {
-        for (let gx=0; gx<w; gx+=gridBase) {
-            const idx = Math.min(gy,h-1)*w + Math.min(gx,w-1);
-            const d=S.distField[idx], isIn=S.insideMask[idx];
-            let tileSize = isIn ? gridBase : Math.max(1, Math.round(gridBase * (1 - edgeCurve(d, zone) * intF)));
-            if (S.anim==='breathe') {
-                const pulse = 0.85 + 0.15 * Math.sin(time*2 + (gx+gy)*0.005);
-                tileSize = Math.max(1, Math.round(tileSize * pulse));
-            }
-            const cx=Math.min(gx+Math.floor(gridBase/2),w-1);
-            const cy=Math.min(gy+Math.floor(gridBase/2),h-1);
-            const ci=(cy*w+cx)*4;
-            const r=src[ci],g=src[ci+1],b=src[ci+2];
-            const offX=gx+Math.floor((gridBase-tileSize)/2);
-            const offY=gy+Math.floor((gridBase-tileSize)/2);
-            for (let ty=0;ty<tileSize;ty++) {
-                for (let tx=0;tx<tileSize;tx++) {
-                    const px=offX+tx, py=offY+ty;
-                    if (px>=0&&px<w&&py>=0&&py<h) {
-                        const pi=(py*w+px)*4;
-                        out[pi]=r; out[pi+1]=g; out[pi+2]=b; out[pi+3]=255;
-                    }
-                }
-            }
-        }
-    }
-}
-
-function applyWave(src, out, w, h, time) {
-    const str = (S.intensity/100)*200;
-    const freq = 0.01 + (S.detail/100)*0.08;
-    const zone = Math.max(4, (S.edgeSoftness/100)*Math.min(w,h)*0.35);
-    for (let y=0;y<h;y++) {
-        for (let x=0;x<w;x++) {
-            const idx=y*w+x, di=idx*4;
-            const d=S.distField[idx], isIn=S.insideMask[idx];
-            const waveAmt = isIn ? 0 : edgeCurve(d, zone);
-            const wave = waveAmt * str;
-            const dx = Math.sin(y*freq + d*0.04 + time*2) * wave;
-            const dy = Math.cos(x*freq + d*0.04 + time*2) * wave;
-            const sx = Math.max(0, Math.min(w-1, x+dx+0.5|0));
-            const sy = Math.max(0, Math.min(h-1, y+dy+0.5|0));
-            const si=(sy*w+sx)*4;
-            out[di]=src[si]; out[di+1]=src[si+1]; out[di+2]=src[si+2]; out[di+3]=src[si+3];
-        }
-    }
-}
-
-function applyShatter(src, out, w, h, time) {
-    const str = (S.intensity/100)*180;
-    const zone = Math.max(4, (S.edgeSoftness/100)*Math.min(w,h)*0.3);
-    const rng = mulberry32(S.seed);
-    const numCells = 30 + Math.round((S.detail/100)*150);
-    const cells = [];
-    for (let i=0;i<numCells;i++) cells.push({ x:rng()*w, y:rng()*h, dx:(rng()-0.5)*str, dy:(rng()-0.5)*str });
-    for (let y=0;y<h;y++) {
-        for (let x=0;x<w;x++) {
-            const idx=y*w+x, di=idx*4;
-            const d=S.distField[idx], isIn=S.insideMask[idx];
-            let minD=Infinity, nearest=0;
-            for (let c=0;c<numCells;c++) {
-                const cd=(x-cells[c].x)**2+(y-cells[c].y)**2;
-                if (cd<minD){minD=cd;nearest=c;}
-            }
-            let amt = isIn ? 0 : edgeCurve(d, zone);
-            if (S.anim==='pulse-wave') amt *= 0.5 + 0.5*Math.sin(time*1.5 + d*0.015);
-            const cell=cells[nearest];
-            const sx = Math.max(0, Math.min(w-1, x+cell.dx*amt+0.5|0));
-            const sy = Math.max(0, Math.min(h-1, y+cell.dy*amt+0.5|0));
-            const si=(sy*w+sx)*4;
-            out[di]=src[si]; out[di+1]=src[si+1]; out[di+2]=src[si+2]; out[di+3]=src[si+3];
-        }
-    }
-}
-
-// ── NEW EFFECT: Chromatic Aberration ──
-function applyChromatic(src, out, w, h, time) {
-    const str = (S.intensity / 100) * 120;
-    const zone = Math.max(4, (S.edgeSoftness / 100) * Math.min(w, h) * 0.35);
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            const idx = y * w + x, di = idx * 4;
-            const d = S.distField[idx], isIn = S.insideMask[idx];
-            let amt = isIn ? 0 : edgeCurve(d, zone) * str;
-            if (S.anim !== 'none') amt *= 0.7 + 0.3 * Math.sin(time * 2 + d * 0.01);
-            const angle = Math.atan2(y - (S.textY / 100) * h, x - (S.textX / 100) * w);
-            const rOx = Math.round(Math.cos(angle) * amt);
-            const rOy = Math.round(Math.sin(angle) * amt);
-            const bOx = Math.round(Math.cos(angle + Math.PI) * amt);
-            const bOy = Math.round(Math.sin(angle + Math.PI) * amt);
-            const rsx = Math.max(0, Math.min(w - 1, x + rOx));
-            const rsy = Math.max(0, Math.min(h - 1, y + rOy));
-            const bsx = Math.max(0, Math.min(w - 1, x + bOx));
-            const bsy = Math.max(0, Math.min(h - 1, y + bOy));
-            out[di]     = src[(rsy * w + rsx) * 4];
-            out[di + 1] = src[di + 1];
-            out[di + 2] = src[(bsy * w + bsx) * 4 + 2];
-            out[di + 3] = 255;
-        }
-    }
-}
-
-// ── NEW EFFECT: Liquid Warp (Perlin-like noise displacement) ──
-function applyLiquid(src, out, w, h, time) {
-    const str = (S.intensity / 100) * 220;
-    const zone = Math.max(4, (S.edgeSoftness / 100) * Math.min(w, h) * 0.35);
-    const freq = 0.003 + (S.detail / 100) * 0.015;
-    const rng = mulberry32(S.seed);
-    const phaseX = rng() * 1000, phaseY = rng() * 1000;
-    for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-            const idx = y * w + x, di = idx * 4;
-            const d = S.distField[idx], isIn = S.insideMask[idx];
-            let amt = isIn ? 0 : edgeCurve(d, zone);
-            amt *= str;
-            if (S.anim !== 'none') {
-                amt *= 0.6 + 0.4 * Math.sin(time * 1.5 + x * 0.003 + y * 0.002);
-            }
-            const n1x = Math.sin(x * freq + phaseX + time * 0.8) * Math.cos(y * freq * 0.7 + time * 0.6);
-            const n1y = Math.cos(y * freq + phaseY + time * 0.8) * Math.sin(x * freq * 0.7 + time * 0.6);
-            const n2x = Math.sin(x * freq * 2.1 + y * freq * 0.5 + time * 1.2) * 0.5;
-            const n2y = Math.cos(y * freq * 2.1 + x * freq * 0.5 + time * 1.2) * 0.5;
-            const dx = (n1x + n2x) * amt;
-            const dy = (n1y + n2y) * amt;
-            const sx = Math.max(0, Math.min(w - 1, x + dx + 0.5 | 0));
-            const sy = Math.max(0, Math.min(h - 1, y + dy + 0.5 | 0));
-            const si = (sy * w + sx) * 4;
-            out[di] = src[si]; out[di + 1] = src[si + 1]; out[di + 2] = src[si + 2]; out[di + 3] = src[si + 3];
-        }
-    }
-}
-
-// ── NEW EFFECT: Glitch Slice ──
-function applyGlitch(src, out, w, h, time) {
-    const str = (S.intensity / 100) * 200;
-    const zone = Math.max(4, (S.edgeSoftness / 100) * Math.min(w, h) * 0.35);
-    const numSlices = 5 + Math.round((S.detail / 100) * 40);
-    const sliceH = Math.ceil(h / numSlices);
-    const baseSeed = S.seed + (S.anim !== 'none' ? Math.floor(time * 3) : 0);
-    const rng = mulberry32(baseSeed);
-    const sliceOffsets = [];
-    for (let i = 0; i < numSlices; i++) {
-        sliceOffsets.push({ dx: (rng() - 0.5) * 2 * str, channel: Math.floor(rng() * 3) });
-    }
-    for (let y = 0; y < h; y++) {
-        const sliceIdx = Math.min(Math.floor(y / sliceH), numSlices - 1);
-        const slice = sliceOffsets[sliceIdx];
-        for (let x = 0; x < w; x++) {
-            const idx = y * w + x, di = idx * 4;
-            const d = S.distField[idx], isIn = S.insideMask[idx];
-            if (isIn) {
-                out[di] = src[di]; out[di+1] = src[di+1]; out[di+2] = src[di+2]; out[di+3] = 255;
-                continue;
-            }
-            let amt = edgeCurve(d, zone);
-            const dx = Math.round(slice.dx * amt);
-            const sx = Math.max(0, Math.min(w - 1, x + dx));
-            const si = (y * w + sx) * 4;
-            // Shift only one channel for RGB split glitch look
-            if (slice.channel === 0) {
-                out[di] = src[(y * w + Math.max(0, Math.min(w - 1, x + dx * 1.5))) * 4];
-                out[di + 1] = src[di + 1];
-                out[di + 2] = src[si + 2];
-            } else if (slice.channel === 1) {
-                out[di] = src[si];
-                out[di + 1] = src[(y * w + Math.max(0, Math.min(w - 1, x - dx))) * 4 + 1];
-                out[di + 2] = src[si + 2];
-            } else {
-                out[di] = src[si];
-                out[di + 1] = src[si + 1];
-                out[di + 2] = src[(y * w + Math.max(0, Math.min(w - 1, x + dx * 1.3))) * 4 + 2];
-            }
-            out[di + 3] = 255;
-        }
-    }
-}
-
+// ── Box blur for pre-processing ──
 function boxBlur(data, w, h, radius) {
+    if (radius < 1) return new Uint8ClampedArray(data);
     const out = new Uint8ClampedArray(data.length);
     const tmp = new Uint8ClampedArray(data.length);
-    for (let y=0;y<h;y++) {
-        for (let x=0;x<w;x++) {
-            let r=0,g=0,b=0,c=0;
-            for (let kx=-radius;kx<=radius;kx++) {
-                const si=(y*w+Math.max(0,Math.min(w-1,x+kx)))*4;
-                r+=data[si]; g+=data[si+1]; b+=data[si+2]; c++;
+    // Horizontal
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let r = 0, g = 0, b = 0, c = 0;
+            for (let kx = -radius; kx <= radius; kx++) {
+                const si = (y * w + Math.max(0, Math.min(w - 1, x + kx))) * 4;
+                r += data[si]; g += data[si + 1]; b += data[si + 2]; c++;
             }
-            const di=(y*w+x)*4;
-            tmp[di]=r/c; tmp[di+1]=g/c; tmp[di+2]=b/c; tmp[di+3]=255;
+            const di = (y * w + x) * 4;
+            tmp[di] = r / c; tmp[di + 1] = g / c; tmp[di + 2] = b / c; tmp[di + 3] = 255;
         }
     }
-    for (let y=0;y<h;y++) {
-        for (let x=0;x<w;x++) {
-            let r=0,g=0,b=0,c=0;
-            for (let ky=-radius;ky<=radius;ky++) {
-                const si=(Math.max(0,Math.min(h-1,y+ky))*w+x)*4;
-                r+=tmp[si]; g+=tmp[si+1]; b+=tmp[si+2]; c++;
+    // Vertical
+    for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+            let r = 0, g = 0, b = 0, c = 0;
+            for (let ky = -radius; ky <= radius; ky++) {
+                const si = (Math.max(0, Math.min(h - 1, y + ky)) * w + x) * 4;
+                r += tmp[si]; g += tmp[si + 1]; b += tmp[si + 2]; c++;
             }
-            const di=(y*w+x)*4;
-            out[di]=r/c; out[di+1]=g/c; out[di+2]=b/c; out[di+3]=255;
+            const di = (y * w + x) * 4;
+            out[di] = r / c; out[di + 1] = g / c; out[di + 2] = b / c; out[di + 3] = 255;
         }
     }
     return out;
 }
 
-function applyColorEffects(out, w, h) {
-    const zone = Math.max(4, (S.edgeSoftness/100)*Math.min(w,h)*0.3);
-    const bgR=parseInt(S.bgColor.slice(1,3),16);
-    const bgG=parseInt(S.bgColor.slice(3,5),16);
-    const bgB=parseInt(S.bgColor.slice(5,7),16);
-    for (let y=0;y<h;y++) {
-        for (let x=0;x<w;x++) {
-            const idx=y*w+x, di=idx*4;
-            const d=S.distField[idx], isIn=S.insideMask[idx];
-            let r=out[di], g=out[di+1], b=out[di+2];
-            if (isIn) {
-                if (S.insideColor==='bright') { r=Math.min(255,r*1.3); g=Math.min(255,g*1.3); b=Math.min(255,b*1.3); }
-                else if (S.insideColor==='saturate') {
-                    const gray=0.299*r+0.587*g+0.114*b;
-                    r=Math.min(255,Math.max(0,gray+(r-gray)*1.6));
-                    g=Math.min(255,Math.max(0,gray+(g-gray)*1.6));
-                    b=Math.min(255,Math.max(0,gray+(b-gray)*1.6));
-                }
-            } else {
-                const t = edgeCurve(d, zone);
-                if (S.outsideColor==='grayscale') {
-                    const gray=0.299*r+0.587*g+0.114*b;
-                    r=r*(1-t)+gray*t; g=g*(1-t)+gray*t; b=b*(1-t)+gray*t;
-                } else if (S.outsideColor==='dark') {
-                    const f=1-t*0.85; r*=f; g*=f; b*=f;
-                } else if (S.outsideColor==='sepia') {
-                    const gray=0.299*r+0.587*g+0.114*b;
-                    const sr=Math.min(255,gray*1.2), sg=gray*0.95, sb=gray*0.7;
-                    r=r*(1-t)+sr*t; g=g*(1-t)+sg*t; b=b*(1-t)+sb*t;
-                }
-                if (S.bgOpacity > 0) {
-                    const bt = t * (S.bgOpacity/100);
-                    r=r*(1-bt)+bgR*bt; g=g*(1-bt)+bgG*bt; b=b*(1-bt)+bgB*bt;
-                }
-            }
-            out[di]=Math.round(r); out[di+1]=Math.round(g); out[di+2]=Math.round(b);
+// ── Channel extraction ──
+function getChannelValue(r, g, b, channel) {
+    switch (channel) {
+        case 'r': return r;
+        case 'g': return g;
+        case 'b': return b;
+        case 'saturation': {
+            const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+            return mx === 0 ? 0 : ((mx - mn) / mx) * 255;
         }
+        default: return 0.299 * r + 0.587 * g + 0.114 * b; // luma
     }
 }
 
+// ── Parse hex color ──
+function hexToRGB(hex) {
+    return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+}
+
+// ── HSL utilities ──
+function rgb2hsl(r, g, b) {
+    r /= 255; g /= 255; b /= 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    let h = 0, s = 0, l = (mx + mn) / 2;
+    if (mx !== mn) {
+        const d = mx - mn;
+        s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+        if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+        else if (mx === g) h = ((b - r) / d + 2) / 6;
+        else h = ((r - g) / d + 4) / 6;
+    }
+    return [h * 360, s * 100, l * 100];
+}
+
+function hsl2rgb(h, s, l) {
+    h /= 360; s /= 100; l /= 100;
+    if (s === 0) { const v = Math.round(l * 255); return [v, v, v]; }
+    const hue2rgb = (p, q, t) => {
+        if (t < 0) t += 1; if (t > 1) t -= 1;
+        if (t < 1 / 6) return p + (q - p) * 6 * t;
+        if (t < 1 / 2) return q;
+        if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
+        return p;
+    };
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    return [Math.round(hue2rgb(p, q, h + 1 / 3) * 255), Math.round(hue2rgb(p, q, h) * 255), Math.round(hue2rgb(p, q, h - 1 / 3) * 255)];
+}
+
+// ── Main render ──
 function render(time) {
     if (!S.sourceImg || !S.srcImageData) return;
     const w = S.W, h = S.H;
-    generateTextMask(w, h);
     const src = S.srcImageData.data;
+
+    // 1. Pre-blur
+    const blurred = S.preBlur > 0 ? boxBlur(src, w, h, S.preBlur) : src;
+
+    // 2. Extract channel values
+    const vals = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+        const si = i * 4;
+        vals[i] = getChannelValue(blurred[si], blurred[si + 1], blurred[si + 2], S.channel);
+    }
+
+    // 3. Threshold / Quantize
+    const t = (time || 0) * S.animSpeed;
+    const threshBase = (S.threshold / 100) * 255;
+    let threshAnimOffset = 0;
+    if (S.anim === 'breathe') threshAnimOffset = Math.sin(t * 2) * 20;
+    else if (S.anim === 'evolve') threshAnimOffset = Math.sin(t * 0.8) * 40;
+    else if (S.anim === 'glitch') threshAnimOffset = (Math.random() > 0.85 ? (Math.random() - 0.5) * 80 : 0);
+
+    const levels = Math.max(2, Math.min(8, S.levels));
+    const quantized = new Uint8Array(w * h); // 0..levels-1
+
+    for (let i = 0; i < w * h; i++) {
+        let v = vals[i] + threshAnimOffset;
+        // Remap with threshold as midpoint
+        const adjusted = ((v - threshBase) / 255) * levels * 2 + levels / 2;
+        let q = Math.floor(Math.max(0, Math.min(levels - 1, adjusted)));
+        if (S.invert) q = levels - 1 - q;
+        quantized[i] = q;
+    }
+
+    // 4. Color mapping
+    const cLow = hexToRGB(S.colorLow);
+    const cMid = hexToRGB(S.colorMid);
+    const cHigh = hexToRGB(S.colorHigh);
+
     const outImageData = S.ctx.createImageData(w, h);
     const out = outImageData.data;
-    const t = (time || 0) * S.animSpeed;
-    switch (S.mode) {
-        case 'displace':  applyDisplace(src,out,w,h,t); break;
-        case 'focus':     applyFocus(src,out,w,h,t); break;
-        case 'scatter':   applyScatter(src,out,w,h,t); break;
-        case 'density':   applyDensity(src,out,w,h,t); break;
-        case 'wave':      applyWave(src,out,w,h,t); break;
-        case 'shatter':   applyShatter(src,out,w,h,t); break;
-        case 'chromatic': applyChromatic(src,out,w,h,t); break;
-        case 'liquid':    applyLiquid(src,out,w,h,t); break;
-        case 'glitch':    applyGlitch(src,out,w,h,t); break;
-        default:          applyDisplace(src,out,w,h,t);
+    const rng = mulberry32(S.seed + Math.floor(t * 3));
+
+    for (let i = 0; i < w * h; i++) {
+        const si = i * 4, q = quantized[i];
+        const frac = q / (levels - 1); // 0..1
+
+        let r, g, b;
+        if (S.mixMode === 'flat') {
+            // Interpolate between colors
+            if (levels === 2) {
+                r = cLow[0] + (cHigh[0] - cLow[0]) * frac;
+                g = cLow[1] + (cHigh[1] - cLow[1]) * frac;
+                b = cLow[2] + (cHigh[2] - cLow[2]) * frac;
+            } else {
+                if (frac <= 0.5) {
+                    const t2 = frac * 2;
+                    r = cLow[0] + (cMid[0] - cLow[0]) * t2;
+                    g = cLow[1] + (cMid[1] - cLow[1]) * t2;
+                    b = cLow[2] + (cMid[2] - cLow[2]) * t2;
+                } else {
+                    const t2 = (frac - 0.5) * 2;
+                    r = cMid[0] + (cHigh[0] - cMid[0]) * t2;
+                    g = cMid[1] + (cHigh[1] - cMid[1]) * t2;
+                    b = cMid[2] + (cHigh[2] - cMid[2]) * t2;
+                }
+            }
+        } else if (S.mixMode === 'tint') {
+            // Original image tinted by mapped color
+            const tintR = cLow[0] + (cHigh[0] - cLow[0]) * frac;
+            const tintG = cLow[1] + (cHigh[1] - cLow[1]) * frac;
+            const tintB = cLow[2] + (cHigh[2] - cLow[2]) * frac;
+            r = (src[si] * 0.4 + tintR * 0.6);
+            g = (src[si + 1] * 0.4 + tintG * 0.6);
+            b = (src[si + 2] * 0.4 + tintB * 0.6);
+        } else { // multiply
+            const tintR = cLow[0] + (cHigh[0] - cLow[0]) * frac;
+            const tintG = cLow[1] + (cHigh[1] - cLow[1]) * frac;
+            const tintB = cLow[2] + (cHigh[2] - cLow[2]) * frac;
+            r = (src[si] * tintR) / 255;
+            g = (src[si + 1] * tintG) / 255;
+            b = (src[si + 2] * tintB) / 255;
+        }
+
+        // 5. Edge glow
+        if (S.edgeGlow > 0) {
+            const x = i % w, y = (i / w) | 0;
+            let isEdge = false;
+            if (x > 0 && quantized[i - 1] !== q) isEdge = true;
+            else if (x < w - 1 && quantized[i + 1] !== q) isEdge = true;
+            else if (y > 0 && quantized[i - w] !== q) isEdge = true;
+            else if (y < h - 1 && quantized[i + w] !== q) isEdge = true;
+            if (isEdge) {
+                const glow = S.edgeGlow / 100;
+                r = r + (255 - r) * glow;
+                g = g + (255 - g) * glow;
+                b = b + (255 - b) * glow;
+            }
+        }
+
+        // 6. Post FX: brightness, contrast
+        if (S.brightness !== 0) {
+            const bf = S.brightness * 2.55;
+            r += bf; g += bf; b += bf;
+        }
+        if (S.contrast !== 0) {
+            const cf = (259 * (S.contrast * 2.55 + 255)) / (255 * (259 - S.contrast * 2.55));
+            r = cf * (r - 128) + 128;
+            g = cf * (g - 128) + 128;
+            b = cf * (b - 128) + 128;
+        }
+
+        // 7. Saturation
+        if (S.saturation !== 0) {
+            const hsl = rgb2hsl(Math.max(0, Math.min(255, r)), Math.max(0, Math.min(255, g)), Math.max(0, Math.min(255, b)));
+            hsl[1] = Math.max(0, Math.min(100, hsl[1] + S.saturation));
+            const rgb = hsl2rgb(hsl[0], hsl[1], hsl[2]);
+            r = rgb[0]; g = rgb[1]; b = rgb[2];
+        }
+
+        // 8. Grain
+        if (S.grain > 0) {
+            const noise = (rng() - 0.5) * S.grain * 5;
+            r += noise; g += noise; b += noise;
+        }
+
+        out[si] = Math.max(0, Math.min(255, r));
+        out[si + 1] = Math.max(0, Math.min(255, g));
+        out[si + 2] = Math.max(0, Math.min(255, b));
+        out[si + 3] = 255;
     }
-    applyColorEffects(out, w, h);
+
     S.ctx.putImageData(outImageData, 0, 0);
 }
 
+// ── Animation ──
 let animRAF = null, animStartTime = 0;
 function startAnim() {
     if (S.anim === 'none') { stopAnim(); return; }
@@ -588,6 +350,7 @@ function stopAnim() {
     if (animRAF) { cancelAnimationFrame(animRAF); animRAF = null; }
 }
 
+// ── Canvas fit / zoom / pan ──
 function fitCanvas(resetView) {
     if (!S.canvas) return;
     const area = document.getElementById('canvas-area');
@@ -604,17 +367,18 @@ function fitCanvas(resetView) {
 function updateStatus(msg, type) {
     const el = document.getElementById('status');
     el.textContent = msg;
-    el.className = 'status-msg' + (type ? ' '+type : '');
+    el.className = 'status-msg' + (type ? ' ' + type : '');
 }
 
+// ── Theme ──
 function initTheme() {
     const saved = localStorage.getItem('warp-theme');
-    if (saved==='light') document.documentElement.classList.add('light');
+    if (saved === 'light') document.documentElement.classList.add('light');
     updateThemeIcon();
 }
 function toggleTheme() {
     document.documentElement.classList.toggle('light');
-    localStorage.setItem('warp-theme', document.documentElement.classList.contains('light')?'light':'dark');
+    localStorage.setItem('warp-theme', document.documentElement.classList.contains('light') ? 'light' : 'dark');
     updateThemeIcon();
 }
 function updateThemeIcon() {
@@ -632,7 +396,70 @@ function bindToggleGroup(selector, callback) {
     });
 }
 
+let renderTimeout = null;
+function scheduleRender() {
+    if (!S.sourceImg) return;
+    clearTimeout(renderTimeout);
+    renderTimeout = setTimeout(() => { render(0); if (S.anim !== 'none') startAnim(); }, 30);
+}
+
+function syncUIFromState() {
+    const map = {
+        'threshold': 'threshold', 'preBlur': 'preBlur', 'levels': 'levels',
+        'intensity': 'threshold', 'detail': 'levels', 'seed': 'seed',
+        'brightness': 'brightness', 'contrast': 'contrast', 'saturation': 'saturation',
+        'grain': 'grain', 'edgeGlow': 'edgeGlow', 'animSpeed': 'animSpeed',
+    };
+    const valMap = {
+        'threshold': 'thresholdVal', 'preBlur': 'preBlurVal', 'levels': 'levelsVal',
+        'brightness': 'brightnessVal', 'contrast': 'contrastVal', 'saturation': 'saturationVal',
+        'grain': 'grainVal', 'edgeGlow': 'edgeGlowVal', 'animSpeed': 'animSpeedVal',
+    };
+    Object.keys(valMap).forEach(elId => {
+        const el = document.getElementById(elId);
+        if (el) el.value = S[elId];
+        const valEl = document.getElementById(valMap[elId]);
+        if (valEl) valEl.textContent = S[elId];
+    });
+    document.getElementById('colorLow').value = S.colorLow;
+    document.getElementById('colorMid').value = S.colorMid;
+    document.getElementById('colorHigh').value = S.colorHigh;
+    document.querySelectorAll('.channel-btn').forEach(b => b.classList.toggle('active', b.dataset.channel === S.channel));
+    document.querySelectorAll('.mix-btn').forEach(b => b.classList.toggle('active', b.dataset.mix === S.mixMode));
+    document.querySelectorAll('.invert-btn').forEach(b => b.classList.toggle('active', (b.dataset.invert === 'true') === S.invert));
+    document.querySelectorAll('.anim-btn').forEach(b => b.classList.toggle('active', b.dataset.anim === S.anim));
+}
+
+function randomizeParams() {
+    const channels = ['luma', 'r', 'g', 'b', 'saturation'];
+    S.channel = channels[Math.floor(Math.random() * channels.length)];
+    S.threshold = 20 + Math.floor(Math.random() * 60);
+    S.preBlur = Math.floor(Math.random() * 10);
+    S.levels = 2 + Math.floor(Math.random() * 5);
+    S.mixMode = ['flat', 'tint', 'multiply'][Math.floor(Math.random() * 3)];
+    S.invert = Math.random() > 0.7;
+    S.brightness = Math.floor((Math.random() - 0.5) * 40);
+    S.contrast = Math.floor(Math.random() * 40);
+    S.saturation = Math.floor(Math.random() * 80 - 20);
+    S.grain = Math.floor(Math.random() * 25);
+    S.edgeGlow = Math.floor(Math.random() * 30);
+    // Random colors
+    const rc = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+    S.colorLow = rc(); S.colorMid = rc(); S.colorHigh = rc();
+    syncUIFromState();
+    scheduleRender();
+    updateStatus('randomized!', 'success');
+}
+
+function applyPreset(p) {
+    Object.keys(p).forEach(k => { S[k] = p[k]; });
+    syncUIFromState();
+    scheduleRender();
+    updateStatus('preset applied!', 'success');
+}
+
 function bindUI() {
+    // Image upload
     document.getElementById('imageInput').addEventListener('change', (e) => {
         if (e.target.files[0]) loadImage(e.target.files[0]);
     });
@@ -644,19 +471,22 @@ function bindUI() {
         const file = e.dataTransfer.files[0];
         if (file && file.type.startsWith('image/')) loadImage(file);
     });
+
+    // Apply
     document.getElementById('applyBtn').addEventListener('click', () => {
-        if (!S.sourceImg) { updateStatus('\uc774\ubbf8\uc9c0\ub97c \uba3c\uc800 \uc62c\ub824\uc8fc\uc138\uc694', 'error'); return; }
-        updateStatus('\ucc98\ub9ac \uc911...');
-        setTimeout(() => { S.lastTextKey = ''; render(0); if (S.anim !== 'none') startAnim(); updateStatus('\uc644\ub8cc!', 'success'); }, 16);
+        if (!S.sourceImg) { updateStatus('upload image first', 'error'); return; }
+        updateStatus('processing...');
+        setTimeout(() => { render(0); if (S.anim !== 'none') startAnim(); updateStatus('done!', 'success'); }, 16);
     });
+
+    // View
     document.getElementById('resetViewBtn').addEventListener('click', () => { fitCanvas(true); if (S.sourceImg) render(0); });
     document.getElementById('themeToggle').addEventListener('click', toggleTheme);
 
-    // ── Zoom / Pan ──
+    // Zoom / Pan
     area.addEventListener('wheel', (e) => {
         e.preventDefault();
-        const delta = e.deltaY > 0 ? 0.9 : 1.1;
-        S.zoom = Math.max(0.1, Math.min(10, S.zoom * delta));
+        S.zoom = Math.max(0.1, Math.min(10, S.zoom * (e.deltaY > 0 ? 0.9 : 1.1)));
         fitCanvas();
     }, { passive: false });
     area.addEventListener('mousedown', (e) => {
@@ -674,195 +504,92 @@ function bindUI() {
     window.addEventListener('mouseup', () => {
         if (S.isPanning) { S.isPanning = false; area.style.cursor = ''; }
     });
-    // Touch pinch zoom
-    let lastTouchDist = 0;
-    area.addEventListener('touchstart', (e) => {
-        if (e.touches.length === 2) {
-            const dx = e.touches[0].clientX - e.touches[1].clientX;
-            const dy = e.touches[0].clientY - e.touches[1].clientY;
-            lastTouchDist = Math.sqrt(dx * dx + dy * dy);
-        }
-    }, { passive: true });
-    area.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2) {
-            e.preventDefault();
-            const dx = e.touches[0].clientX - e.touches[1].clientX;
-            const dy = e.touches[0].clientY - e.touches[1].clientY;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (lastTouchDist > 0) {
-                S.zoom = Math.max(0.1, Math.min(10, S.zoom * (dist / lastTouchDist)));
-                fitCanvas();
-            }
-            lastTouchDist = dist;
-        }
-    }, { passive: false });
 
-    // ── Before/After (hold Space) ──
+    // Before/After
     document.addEventListener('keydown', (e) => {
         if (e.code === 'Space' && !e.repeat && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
             e.preventDefault();
             S.showOriginal = true;
-            if (S.sourceImg) {
-                const ctx = S.ctx;
-                ctx.drawImage(S.sourceImg, 0, 0, S.W, S.H);
-            }
+            if (S.sourceImg) S.ctx.drawImage(S.sourceImg, 0, 0, S.W, S.H);
         }
     });
     document.addEventListener('keyup', (e) => {
-        if (e.code === 'Space') {
-            S.showOriginal = false;
-            if (S.sourceImg) render(0);
-        }
+        if (e.code === 'Space') { S.showOriginal = false; if (S.sourceImg) render(0); }
     });
 
-    // ── Randomize ──
-    const randBtn = document.getElementById('randomizeBtn');
-    if (randBtn) randBtn.addEventListener('click', randomizeParams);
+    // Randomize
+    document.getElementById('randomizeBtn').addEventListener('click', randomizeParams);
 
-    // ── Presets ──
+    // Presets
     document.querySelectorAll('.preset-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const p = PRESETS[btn.dataset.preset];
-            if (!p) return;
-            applyPreset(p);
-            document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
+            if (p) applyPreset(p);
         });
     });
 
-    // ── Clipboard copy ──
-    const clipBtn = document.getElementById('clipboardBtn');
-    if (clipBtn) clipBtn.addEventListener('click', copyToClipboard);
-
-    // ── WebM export ──
-    const webmBtn = document.getElementById('saveWebmBtn');
-    if (webmBtn) webmBtn.addEventListener('click', exportWebM);
-    document.getElementById('warpText').addEventListener('input', (e) => { S.text = e.target.value || 'A'; scheduleRender(); });
-    document.getElementById('fontSelect').addEventListener('change', (e) => { S.font = e.target.value; scheduleRender(); });
-    bindToggleGroup('.weight-btn', (btn) => { S.fontWeight = btn.dataset.weight; scheduleRender(); });
+    // Sliders
     const sliders = [
-        ['textSize','textSize','textSizeVal'], ['textLetterSpace','letterSpace','textLetterSpaceVal'],
-        ['textLineHeight','lineHeight','textLineHeightVal'], ['textX','textX','textXVal'],
-        ['textY','textY','textYVal'], ['textRotation','textRotation','textRotationVal'],
-        ['intensity','intensity','intensityVal'], ['edgeSoftness','edgeSoftness','edgeSoftnessVal'],
-        ['detail','detail','detailVal'], ['seed','seed','seedVal'],
-        ['bgOpacity','bgOpacity','bgOpacityVal'], ['animSpeed','animSpeed','animSpeedVal'],
+        ['threshold', 'threshold', 'thresholdVal'],
+        ['preBlur', 'preBlur', 'preBlurVal'],
+        ['levels', 'levels', 'levelsVal'],
+        ['brightness', 'brightness', 'brightnessVal'],
+        ['contrast', 'contrast', 'contrastVal'],
+        ['saturation', 'saturation', 'saturationVal'],
+        ['grain', 'grain', 'grainVal'],
+        ['edgeGlow', 'edgeGlow', 'edgeGlowVal'],
+        ['animSpeed', 'animSpeed', 'animSpeedVal'],
     ];
     sliders.forEach(([id, key, valId]) => {
         const el = document.getElementById(id);
         if (!el) return;
         el.addEventListener('input', () => {
             S[key] = parseFloat(el.value);
-            document.getElementById(valId).textContent = el.value;
+            const valEl = document.getElementById(valId);
+            if (valEl) valEl.textContent = el.value;
             scheduleRender();
         });
     });
-    bindToggleGroup('.mode-btn', (btn) => { S.mode = btn.dataset.mode; scheduleRender(); });
+
+    // Colors
+    ['colorLow', 'colorMid', 'colorHigh'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', (e) => { S[id] = e.target.value; scheduleRender(); });
+    });
+
+    // Toggle groups
+    bindToggleGroup('.channel-btn', (btn) => { S.channel = btn.dataset.channel; scheduleRender(); });
+    bindToggleGroup('.mix-btn', (btn) => { S.mixMode = btn.dataset.mix; scheduleRender(); });
     bindToggleGroup('.invert-btn', (btn) => { S.invert = btn.dataset.invert === 'true'; scheduleRender(); });
-    bindToggleGroup('.inside-color-btn', (btn) => { S.insideColor = btn.dataset.color; scheduleRender(); });
-    bindToggleGroup('.outside-color-btn', (btn) => { S.outsideColor = btn.dataset.color; scheduleRender(); });
-    document.getElementById('bgColor').addEventListener('input', (e) => { S.bgColor = e.target.value; scheduleRender(); });
     bindToggleGroup('.anim-btn', (btn) => {
         S.anim = btn.dataset.anim;
-        if (S.anim !== 'none') startAnim(); else { stopAnim(); if(S.sourceImg) render(0); }
+        if (S.anim !== 'none') startAnim(); else { stopAnim(); if (S.sourceImg) render(0); }
     });
     bindToggleGroup('.scale-btn', (btn) => { S.exportScale = parseInt(btn.dataset.scale); updateExportInfo(); });
+
+    // Export
     document.getElementById('savePngBtn').addEventListener('click', () => savePNG(false));
     document.getElementById('saveTransBtn').addEventListener('click', () => savePNG(true));
-    window.addEventListener('resize', fitCanvas);
-}
+    const clipBtn = document.getElementById('clipboardBtn');
+    if (clipBtn) clipBtn.addEventListener('click', copyToClipboard);
+    const webmBtn = document.getElementById('saveWebmBtn');
+    if (webmBtn) webmBtn.addEventListener('click', exportWebM);
 
-let renderTimeout = null, renderFullTimeout = null;
-function scheduleRender() {
-    if (!S.sourceImg) return;
-    clearTimeout(renderTimeout);
-    clearTimeout(renderFullTimeout);
-    // Quick preview (immediate feel)
-    renderTimeout = setTimeout(() => {
-        S.lastTextKey = ''; // force text mask regeneration
-        render(0);
-        if (S.anim !== 'none') startAnim();
-    }, 30);
-}
-
-function randomizeParams() {
-    const modes = ['displace','focus','scatter','density','wave','shatter','chromatic','liquid','glitch'];
-    S.mode = modes[Math.floor(Math.random() * modes.length)];
-    S.intensity = 20 + Math.floor(Math.random() * 80);
-    S.edgeSoftness = 10 + Math.floor(Math.random() * 80);
-    S.detail = 10 + Math.floor(Math.random() * 90);
-    S.seed = Math.floor(Math.random() * 999);
-    S.invert = Math.random() > 0.7;
-    S.insideColor = 'original';
-    S.outsideColor = 'original';
-    S.bgOpacity = 0;
-    syncUIFromState();
-    scheduleRender();
-    updateStatus('랜덤 적용!', 'success');
-}
-
-function applyPreset(p) {
-    Object.keys(p).forEach(k => { S[k] = p[k]; });
-    syncUIFromState();
-    scheduleRender();
-    updateStatus('프리셋 적용!', 'success');
-}
-
-function syncUIFromState() {
-    // Sync sliders
-    const sliderMap = {
-        'intensity':'intensity', 'edgeSoftness':'edgeSoftness', 'detail':'detail',
-        'seed':'seed', 'bgOpacity':'bgOpacity', 'animSpeed':'animSpeed',
-        'textSize':'textSize', 'textLetterSpace':'letterSpace', 'textLineHeight':'lineHeight',
-        'textX':'textX', 'textY':'textY', 'textRotation':'textRotation'
-    };
-    const valMap = {
-        'intensity':'intensityVal', 'edgeSoftness':'edgeSoftnessVal', 'detail':'detailVal',
-        'seed':'seedVal', 'bgOpacity':'bgOpacityVal', 'animSpeed':'animSpeedVal',
-        'textSize':'textSizeVal', 'textLetterSpace':'textLetterSpaceVal', 'textLineHeight':'textLineHeightVal',
-        'textX':'textXVal', 'textY':'textYVal', 'textRotation':'textRotationVal'
-    };
-    Object.keys(sliderMap).forEach(elId => {
-        const el = document.getElementById(elId);
-        if (el) { el.value = S[sliderMap[elId]]; }
-        const valEl = document.getElementById(valMap[elId]);
-        if (valEl) { valEl.textContent = S[sliderMap[elId]]; }
-    });
-    // Sync toggle groups
-    document.querySelectorAll('.mode-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.mode === S.mode);
-    });
-    document.querySelectorAll('.invert-btn').forEach(b => {
-        b.classList.toggle('active', (b.dataset.invert === 'true') === S.invert);
-    });
-    document.querySelectorAll('.inside-color-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.color === S.insideColor);
-    });
-    document.querySelectorAll('.outside-color-btn').forEach(b => {
-        b.classList.toggle('active', b.dataset.color === S.outsideColor);
-    });
-    if (S.anim) {
-        document.querySelectorAll('.anim-btn').forEach(b => {
-            b.classList.toggle('active', b.dataset.anim === S.anim);
-        });
-    }
+    window.addEventListener('resize', () => fitCanvas());
 }
 
 async function copyToClipboard() {
-    if (!S.sourceImg) { updateStatus('이미지를 먼저 올려주세요', 'error'); return; }
+    if (!S.sourceImg) { updateStatus('upload image first', 'error'); return; }
     try {
         const blob = await new Promise(resolve => S.canvas.toBlob(resolve, 'image/png'));
         await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-        updateStatus('클립보드에 복사 완료!', 'success');
-    } catch (e) {
-        updateStatus('클립보드 복사 실패: ' + e.message, 'error');
-    }
+        updateStatus('copied!', 'success');
+    } catch (e) { updateStatus('copy failed: ' + e.message, 'error'); }
 }
 
 function exportWebM() {
-    if (!S.sourceImg) { updateStatus('이미지를 먼저 올려주세요', 'error'); return; }
-    const duration = 4000; // 4 seconds
-    const fps = 30;
+    if (!S.sourceImg) { updateStatus('upload image first', 'error'); return; }
+    const duration = 4000, fps = 30;
     const stream = S.canvas.captureStream(fps);
     const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9', videoBitsPerSecond: 5000000 });
     const chunks = [];
@@ -870,21 +597,19 @@ function exportWebM() {
     recorder.onstop = () => {
         const blob = new Blob(chunks, { type: 'video/webm' });
         const link = document.createElement('a');
-        link.download = 'warp-' + Date.now() + '.webm';
+        link.download = 'distort-' + Date.now() + '.webm';
         link.href = URL.createObjectURL(blob);
         link.click();
         URL.revokeObjectURL(link.href);
-        updateStatus('WebM 저장 완료!', 'success');
+        updateStatus('WebM saved!', 'success');
     };
-    // Ensure animation is running
     const prevAnim = S.anim;
     if (S.anim === 'none') S.anim = 'breathe';
     startAnim();
     recorder.start();
-    updateStatus('녹화 중... ' + (duration / 1000) + '초', '');
+    updateStatus('recording ' + (duration / 1000) + 's...', '');
     setTimeout(() => {
-        recorder.stop();
-        stopAnim();
+        recorder.stop(); stopAnim();
         S.anim = prevAnim;
         if (prevAnim === 'none') render(0);
         syncUIFromState();
@@ -892,7 +617,7 @@ function exportWebM() {
 }
 
 function savePNG(transparent) {
-    if (!S.sourceImg) { updateStatus('\uc774\ubbf8\uc9c0\ub97c \uba3c\uc800 \uc62c\ub824\uc8fc\uc138\uc694', 'error'); return; }
+    if (!S.sourceImg) { updateStatus('upload image first', 'error'); return; }
     const scale = S.exportScale;
     const expW = S.W * scale, expH = S.H * scale;
     const c = document.createElement('canvas');
@@ -902,28 +627,28 @@ function savePNG(transparent) {
         const origW = S.W, origH = S.H;
         S.W = expW; S.H = expH;
         S.canvas.width = expW; S.canvas.height = expH;
-        S.processed.width = expW; S.processed.height = expH;
-        S.processed.getContext('2d').drawImage(S.sourceImg, 0, 0, expW, expH);
-        S.srcImageData = S.processed.getContext('2d').getImageData(0, 0, expW, expH);
-        S.lastTextKey = '';
+        const tc = document.createElement('canvas');
+        tc.width = expW; tc.height = expH;
+        tc.getContext('2d').drawImage(S.sourceImg, 0, 0, expW, expH);
+        S.srcImageData = tc.getContext('2d').getImageData(0, 0, expW, expH);
         render(0);
         ctx.drawImage(S.canvas, 0, 0);
         S.W = origW; S.H = origH;
         S.canvas.width = origW; S.canvas.height = origH;
-        S.processed.width = origW; S.processed.height = origH;
-        S.processed.getContext('2d').drawImage(S.sourceImg, 0, 0, origW, origH);
-        S.srcImageData = S.processed.getContext('2d').getImageData(0, 0, origW, origH);
-        S.lastTextKey = '';
+        const tc2 = document.createElement('canvas');
+        tc2.width = origW; tc2.height = origH;
+        tc2.getContext('2d').drawImage(S.sourceImg, 0, 0, origW, origH);
+        S.srcImageData = tc2.getContext('2d').getImageData(0, 0, origW, origH);
         render(0);
         fitCanvas();
     } else {
         ctx.drawImage(S.canvas, 0, 0);
     }
     const link = document.createElement('a');
-    link.download = 'warp-' + Date.now() + '.png';
+    link.download = 'distort-' + Date.now() + '.png';
     link.href = c.toDataURL('image/png');
     link.click();
-    updateStatus(expW + '\u00d7' + expH + ' PNG \uc800\uc7a5 \uc644\ub8cc!', 'success');
+    updateStatus(expW + '\u00d7' + expH + ' PNG saved!', 'success');
 }
 
 document.addEventListener('DOMContentLoaded', init);
