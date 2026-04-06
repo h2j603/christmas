@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Image Text Warp</title>
-    <meta name="description" content="이미지를 왜곡하여 텍스트 형태가 드러나게 하는 크리에이티브 도구">
+    <title>Image Distort</title>
+    <meta name="description" content="이미지 색상 분리/포스터라이즈 도구 — Threshold, Duotone, Posterize, Grain">
     <meta name="theme-color" content="#0a0a0c">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌀</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700&family=Noto+Serif+KR:wght@400;700;900&family=Black+Han+Sans&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -28,9 +28,9 @@
                 <div class="quick-actions">
                     <label for="imageInput" class="btn-action upload-btn" tabindex="0" role="button">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1V10M3 5L7 1L11 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M1 10V12C1 12.5523 1.44772 13 2 13H12C12.5523 13 13 12.5523 13 12V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-                        PHOTO
+                        MEDIA
                     </label>
-                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif">
+                    <input type="file" id="imageInput" accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,video/avi">
                     <button id="applyBtn" class="btn-action primary">APPLY</button>
                     <button id="resetViewBtn" class="btn-action" title="뷰 리셋" style="flex:0 0 36px; padding:8px 0">
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M2 2v5h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 9.5a6 6 0 1 0 1.3-4L2 7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -38,6 +38,23 @@
                     <button id="themeToggle" class="btn-action" title="테마 전환" style="flex:0 0 36px; padding:8px 0">
                         <span id="themeIcon">☀</span>
                     </button>
+                    <button id="randomizeBtn" class="btn-action" title="랜덤" style="flex:0 0 36px; padding:8px 0">
+                        🎲
+                    </button>
+                </div>
+
+                <!-- Video Controls (hidden until video loaded) -->
+                <div id="videoControls" class="section-collapsible" style="display:none; padding:10px 12px;">
+                    <div class="quick-actions" style="margin-bottom:6px">
+                        <button id="videoPlayBtn" class="btn-action" style="flex:0 0 40px; font-size:14px; padding:8px 0">▶</button>
+                        <div class="field" style="flex:1; margin:0">
+                            <input type="range" id="videoSeek" min="0" max="100" value="0" step="0.1">
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; justify-content:space-between">
+                        <span id="videoTimeVal" style="font-family:var(--font-mono); font-size:9px; color:var(--text-3)">0:00 / 0:00</span>
+                        <button id="exportVideoBtn" class="btn-action" style="flex:0; padding:6px 12px; font-size:9px">🎬 EXPORT VIDEO</button>
+                    </div>
                 </div>
 
                 <a href="../" class="tool-nav-link">
@@ -46,101 +63,43 @@
                     <span class="tool-nav-arrow">→</span>
                 </a>
 
-                <!-- TEXT -->
-                <details class="section-collapsible" open>
-                    <summary class="section-toggle"><h2>TEXT</h2></summary>
-                    <div class="section-body">
-                        <div class="field">
-                            <label for="warpText">TEXT</label>
-                            <textarea id="warpText" rows="1" spellcheck="false" placeholder="텍스트 입력...">WARP</textarea>
-                        </div>
-                        <div class="row-2">
-                            <div class="field">
-                                <label for="fontSelect">FONT</label>
-                                <select id="fontSelect">
-                                    <option value="'Black Han Sans', sans-serif" selected>블랙한산스</option>
-                                    <option value="'Noto Sans KR', sans-serif">Noto Sans KR</option>
-                                    <option value="'Noto Serif KR', serif">Noto Serif KR</option>
-                                    <option value="sans-serif">Sans-serif</option>
-                                    <option value="serif">Serif</option>
-                                    <option value="'JetBrains Mono', monospace">Monospace</option>
-                                    <option value="Georgia, serif">Georgia</option>
-                                    <option value="Impact, sans-serif">Impact</option>
-                                </select>
-                            </div>
-                            <div class="field">
-                                <label>WEIGHT</label>
-                                <div class="toggle-group">
-                                    <button class="toggle-btn weight-btn" data-weight="400">Rg</button>
-                                    <button class="toggle-btn weight-btn active" data-weight="700">Bd</button>
-                                    <button class="toggle-btn weight-btn" data-weight="900">Bk</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label for="textSize">SIZE <span class="val" id="textSizeVal">50</span>%</label>
-                            <input type="range" id="textSize" min="5" max="100" value="50">
-                        </div>
-                        <div class="row-2">
-                            <div class="field">
-                                <label for="textLetterSpace">SPACING <span class="val" id="textLetterSpaceVal">0</span></label>
-                                <input type="range" id="textLetterSpace" min="-30" max="60" value="0">
-                            </div>
-                            <div class="field">
-                                <label for="textLineHeight">LINE H <span class="val" id="textLineHeightVal">120</span>%</label>
-                                <input type="range" id="textLineHeight" min="60" max="250" value="120">
-                            </div>
-                        </div>
-                        <div class="row-2">
-                            <div class="field">
-                                <label for="textX">X <span class="val" id="textXVal">50</span>%</label>
-                                <input type="range" id="textX" min="0" max="100" value="50">
-                            </div>
-                            <div class="field">
-                                <label for="textY">Y <span class="val" id="textYVal">50</span>%</label>
-                                <input type="range" id="textY" min="0" max="100" value="50">
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label for="textRotation">ROTATE <span class="val" id="textRotationVal">0</span>°</label>
-                            <input type="range" id="textRotation" min="-180" max="180" value="0">
-                        </div>
-                    </div>
-                </details>
+                <a href="../lettering/" class="tool-nav-link">
+                    <span class="tool-nav-icon">✍</span>
+                    <span class="tool-nav-text"><strong>Lettering Tool</strong> — 모바일 친화적 레터링/캘리그라피</span>
+                    <span class="tool-nav-arrow">→</span>
+                </a>
 
-                <!-- WARP EFFECT -->
+                <!-- THRESHOLD -->
                 <details class="section-collapsible" open>
-                    <summary class="section-toggle"><h2>WARP EFFECT</h2></summary>
+                    <summary class="section-toggle"><h2>THRESHOLD</h2></summary>
                     <div class="section-body">
-                        <div class="toggle-group">
-                            <button class="toggle-btn mode-btn active" data-mode="displace">DISPLACE</button>
-                            <button class="toggle-btn mode-btn" data-mode="focus">FOCUS</button>
-                            <button class="toggle-btn mode-btn" data-mode="scatter">SCATTER</button>
+                        <div class="field">
+                            <label for="threshold">LEVEL <span class="val" id="thresholdVal">50</span>%</label>
+                            <input type="range" id="threshold" min="0" max="100" value="50">
                         </div>
-                        <div class="toggle-group">
-                            <button class="toggle-btn mode-btn" data-mode="density">DENSITY</button>
-                            <button class="toggle-btn mode-btn" data-mode="wave">WAVE</button>
-                            <button class="toggle-btn mode-btn" data-mode="shatter">SHATTER</button>
-                        </div>
-                        <div class="row-2">
-                            <div class="field">
-                                <label for="intensity">INTENSITY <span class="val" id="intensityVal">75</span>%</label>
-                                <input type="range" id="intensity" min="0" max="100" value="75">
-                            </div>
-                            <div class="field">
-                                <label for="edgeSoftness">EDGE <span class="val" id="edgeSoftnessVal">40</span>%</label>
-                                <input type="range" id="edgeSoftness" min="0" max="100" value="40">
+                        <div class="field">
+                            <label>CHANNEL</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn channel-btn active" data-channel="luma">LUMA</button>
+                                <button class="toggle-btn channel-btn" data-channel="r">R</button>
+                                <button class="toggle-btn channel-btn" data-channel="g">G</button>
+                                <button class="toggle-btn channel-btn" data-channel="b">B</button>
+                                <button class="toggle-btn channel-btn" data-channel="saturation">SAT</button>
                             </div>
                         </div>
                         <div class="row-2">
                             <div class="field">
-                                <label for="detail">DETAIL <span class="val" id="detailVal">50</span>%</label>
-                                <input type="range" id="detail" min="1" max="100" value="50">
+                                <label for="preBlur">SOFTNESS <span class="val" id="preBlurVal">3</span></label>
+                                <input type="range" id="preBlur" min="0" max="20" value="3">
                             </div>
                             <div class="field">
-                                <label for="seed">SEED <span class="val" id="seedVal">0</span></label>
-                                <input type="range" id="seed" min="0" max="999" value="0">
+                                <label for="levels">LEVELS <span class="val" id="levelsVal">2</span></label>
+                                <input type="range" id="levels" min="2" max="8" value="2">
                             </div>
+                        </div>
+                        <div class="field">
+                            <label for="edgeSmooth">ROUND EDGE <span class="val" id="edgeSmoothVal">0</span></label>
+                            <input type="range" id="edgeSmooth" min="0" max="20" value="0">
                         </div>
                         <div class="field">
                             <label>INVERT</label>
@@ -152,36 +111,171 @@
                     </div>
                 </details>
 
-                <!-- COLOR -->
-                <details class="section-collapsible">
-                    <summary class="section-toggle"><h2>COLOR</h2></summary>
+                <!-- COLOR MAP -->
+                <details class="section-collapsible" open>
+                    <summary class="section-toggle"><h2>COLOR MAP</h2></summary>
                     <div class="section-body">
-                        <div class="field">
-                            <label>TEXT AREA</label>
-                            <div class="toggle-group">
-                                <button class="toggle-btn inside-color-btn active" data-color="original">ORIG</button>
-                                <button class="toggle-btn inside-color-btn" data-color="bright">BRIGHT</button>
-                                <button class="toggle-btn inside-color-btn" data-color="saturate">VIVID</button>
+                        <div class="row-3">
+                            <div class="field">
+                                <label for="colorLow">LOW</label>
+                                <input type="color" id="colorLow" value="#3030ff">
+                            </div>
+                            <div class="field">
+                                <label for="colorMid">MID</label>
+                                <input type="color" id="colorMid" value="#888888">
+                            </div>
+                            <div class="field">
+                                <label for="colorHigh">HIGH</label>
+                                <input type="color" id="colorHigh" value="#d0d0d0">
                             </div>
                         </div>
                         <div class="field">
-                            <label>OUTSIDE</label>
+                            <label>MIX MODE</label>
                             <div class="toggle-group">
-                                <button class="toggle-btn outside-color-btn" data-color="original">ORIG</button>
-                                <button class="toggle-btn outside-color-btn" data-color="grayscale">GRAY</button>
-                                <button class="toggle-btn outside-color-btn active" data-color="dark">DARK</button>
-                                <button class="toggle-btn outside-color-btn" data-color="sepia">SEPIA</button>
+                                <button class="toggle-btn mix-btn active" data-mix="flat">FLAT</button>
+                                <button class="toggle-btn mix-btn" data-mix="tint">TINT</button>
+                                <button class="toggle-btn mix-btn" data-mix="multiply">MULTIPLY</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- PRESETS -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>PRESETS</h2></summary>
+                    <div class="section-body">
+                        <div class="toggle-group">
+                            <button class="toggle-btn preset-btn" data-preset="blueprint">BLUEPRINT</button>
+                            <button class="toggle-btn preset-btn" data-preset="noir">NOIR</button>
+                            <button class="toggle-btn preset-btn" data-preset="thermal">THERMAL</button>
+                            <button class="toggle-btn preset-btn" data-preset="pop-art">POP ART</button>
+                        </div>
+                        <div class="toggle-group">
+                            <button class="toggle-btn preset-btn" data-preset="xray">X-RAY</button>
+                            <button class="toggle-btn preset-btn" data-preset="solarize">SOLARIZE</button>
+                            <button class="toggle-btn preset-btn" data-preset="duotone-warm">DUOTONE</button>
+                            <button class="toggle-btn preset-btn" data-preset="retro-screen">RETRO</button>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- CREATIVE FX -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>CREATIVE FX</h2></summary>
+                    <div class="section-body">
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="halftone">HALFTONE <span class="val" id="halftoneVal">0</span></label>
+                                <input type="range" id="halftone" min="0" max="20" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="halftoneAngle">ANGLE <span class="val" id="halftoneAngleVal">0</span>°</label>
+                                <input type="range" id="halftoneAngle" min="0" max="90" value="0">
                             </div>
                         </div>
                         <div class="row-2">
                             <div class="field">
-                                <label for="bgColor">BG COLOR</label>
-                                <input type="color" id="bgColor" value="#0a0a0c">
+                                <label for="scanline">SCANLINE <span class="val" id="scanlineVal">0</span>%</label>
+                                <input type="range" id="scanline" min="0" max="100" value="0">
                             </div>
                             <div class="field">
-                                <label for="bgOpacity">BG MIX <span class="val" id="bgOpacityVal">30</span>%</label>
-                                <input type="range" id="bgOpacity" min="0" max="100" value="30">
+                                <label for="scanlineGap">LINE GAP <span class="val" id="scanlineGapVal">3</span></label>
+                                <input type="range" id="scanlineGap" min="2" max="10" value="3">
                             </div>
+                        </div>
+                        <div class="field">
+                            <label for="chromatic">RGB SPLIT <span class="val" id="chromaticVal">0</span>px</label>
+                            <input type="range" id="chromatic" min="0" max="30" value="0">
+                        </div>
+                        <div class="field">
+                            <label>DITHER</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn dither-btn active" data-dither="none">OFF</button>
+                                <button class="toggle-btn dither-btn" data-dither="ordered">ORDERED</button>
+                                <button class="toggle-btn dither-btn" data-dither="atkinson">ATKINSON</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- STYLIZE -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>STYLIZE</h2></summary>
+                    <div class="section-body">
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="edgeDetect">CONTOUR <span class="val" id="edgeDetectVal">0</span>%</label>
+                                <input type="range" id="edgeDetect" min="0" max="100" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="edgeColor">OUTLINE</label>
+                                <input type="color" id="edgeColor" value="#00ffaa">
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="emboss">EMBOSS <span class="val" id="embossVal">0</span>%</label>
+                                <input type="range" id="emboss" min="0" max="100" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="pixelate">PIXELATE <span class="val" id="pixelateVal">0</span></label>
+                                <input type="range" id="pixelate" min="0" max="40" value="0">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="vignette">VIGNETTE <span class="val" id="vignetteVal">0</span>%</label>
+                            <input type="range" id="vignette" min="0" max="100" value="0">
+                        </div>
+                        <div class="field">
+                            <label>INVERT</label>
+                            <div class="toggle-group">
+                                <button class="toggle-btn cinvert-btn active" data-cinvert="none">OFF</button>
+                                <button class="toggle-btn cinvert-btn" data-cinvert="full">ALL</button>
+                                <button class="toggle-btn cinvert-btn" data-cinvert="r">R</button>
+                                <button class="toggle-btn cinvert-btn" data-cinvert="g">G</button>
+                                <button class="toggle-btn cinvert-btn" data-cinvert="b">B</button>
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- POST FX -->
+                <details class="section-collapsible">
+                    <summary class="section-toggle"><h2>POST FX</h2></summary>
+                    <div class="section-body">
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="brightness">BRIGHT <span class="val" id="brightnessVal">0</span></label>
+                                <input type="range" id="brightness" min="-100" max="100" value="0">
+                            </div>
+                            <div class="field">
+                                <label for="contrast">CONTRAST <span class="val" id="contrastVal">0</span></label>
+                                <input type="range" id="contrast" min="-100" max="100" value="0">
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="saturation">SATURATE <span class="val" id="saturationVal">30</span></label>
+                                <input type="range" id="saturation" min="-100" max="100" value="30">
+                            </div>
+                            <div class="field">
+                                <label for="grain">GRAIN <span class="val" id="grainVal">5</span>%</label>
+                                <input type="range" id="grain" min="0" max="100" value="5">
+                            </div>
+                        </div>
+                        <div class="row-2">
+                            <div class="field">
+                                <label for="edgeGlow">BLOOM <span class="val" id="edgeGlowVal">15</span>%</label>
+                                <input type="range" id="edgeGlow" min="0" max="100" value="15">
+                            </div>
+                            <div class="field">
+                                <label for="bloomRadius">BLOOM SIZE <span class="val" id="bloomRadiusVal">8</span></label>
+                                <input type="range" id="bloomRadius" min="1" max="30" value="8">
+                            </div>
+                        </div>
+                        <div class="field">
+                            <label for="edgeNoise">EDGE NOISE <span class="val" id="edgeNoiseVal">20</span>%</label>
+                            <input type="range" id="edgeNoise" min="0" max="100" value="20">
                         </div>
                     </div>
                 </details>
@@ -193,8 +287,8 @@
                         <div class="toggle-group">
                             <button class="toggle-btn anim-btn active" data-anim="none">OFF</button>
                             <button class="toggle-btn anim-btn" data-anim="breathe">BREATHE</button>
+                            <button class="toggle-btn anim-btn" data-anim="evolve">EVOLVE</button>
                             <button class="toggle-btn anim-btn" data-anim="glitch">GLITCH</button>
-                            <button class="toggle-btn anim-btn" data-anim="pulse-wave">PULSE</button>
                         </div>
                         <div class="field">
                             <label for="animSpeed">SPEED <span class="val" id="animSpeedVal">1.0</span>x</label>
@@ -221,12 +315,16 @@
                         </div>
                         <div class="row-2">
                             <button id="savePngBtn" class="btn-action">PNG</button>
+                            <button id="clipboardBtn" class="btn-action">📋 COPY</button>
+                        </div>
+                        <div class="row-2">
+                            <button id="saveWebmBtn" class="btn-action">🎬 WEBM</button>
                             <button id="saveTransBtn" class="btn-action">TRANSPARENT</button>
                         </div>
                     </div>
                 </details>
 
-                <p id="status" class="status-msg" role="status">사진을 올리고 APPLY</p>
+                <p id="status" class="status-msg" role="status">이미지/비디오를 올리고 APPLY · Space=비교 · 스크롤=줌</p>
                 <div class="safe-bottom"></div>
             </div>
         </section>
