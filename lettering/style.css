@@ -133,8 +133,8 @@ body, html {
 /* ─── Controls Panel ───
    touch-action:auto so scrolling works on mobile! */
 #controls {
-    flex: 0 0 auto;
-    max-height: 45dvh;
+    flex: 1 1 0;
+    min-height: 0;
     overflow: hidden;
     background: var(--bg-1);
     display: flex;
@@ -383,8 +383,16 @@ input[type="checkbox"] {
    MOBILE LAYOUT
    ═══════════════════════════════════ */
 @media (max-width: 767px) {
-    #canvas-area { flex: 1 1 0; min-height: 0; }
-    #controls { flex: 0 0 auto; max-height: 45dvh; }
+    #canvas-area {
+        flex: 0 0 40dvh;
+        min-height: 120px;
+        max-height: 45dvh;
+    }
+    #controls {
+        flex: 1 1 0;
+        min-height: 0;
+        max-height: none;
+    }
     input[type="number"] { font-size: 16px; }
     .tool-btn { width: 40px; height: 38px; }
 
