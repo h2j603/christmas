@@ -13,7 +13,8 @@
         fillOpacity: 1.0,
         showFill: true,
         showStroke: true,
-        tool: 'pen', // 'pen' | 'select'
+        tool: 'pen', // 'pen' | 'select' | 'direct'
+        penMode: 'curve', // 'curve' | 'line'
         // Paths: array of { anchors: [{x,y,hix,hiy,hox,hoy}], closed, color, opacity }
         paths: [],
         activePath: -1,    // index of path being drawn/edited
@@ -121,21 +122,22 @@
             const curr = a[i];
             const next = a[(i + 1) % n];
 
+            // Straight anchor → no handles (직선)
+            if (curr.straight) {
+                curr.hix = 0; curr.hiy = 0;
+                curr.hox = 0; curr.hoy = 0;
+                continue;
+            }
+
             if (!path.closed && i === 0) {
-                // First point of open path: handle out toward next
                 const dx = next.x - curr.x, dy = next.y - curr.y;
-                const len = Math.hypot(dx, dy) || 1;
                 curr.hox = dx * 0.3; curr.hoy = dy * 0.3;
                 curr.hix = 0; curr.hiy = 0;
             } else if (!path.closed && i === n - 1) {
-                // Last point of open path: handle in from prev
                 const dx = prev.x - curr.x, dy = prev.y - curr.y;
-                const len = Math.hypot(dx, dy) || 1;
                 curr.hix = dx * 0.3; curr.hiy = dy * 0.3;
                 curr.hox = 0; curr.hoy = 0;
             } else {
-                // Middle points (or any point in closed path):
-                // Smooth handle = direction from prev to next, length proportional to distance
                 const dx = next.x - prev.x, dy = next.y - prev.y;
                 const len = Math.hypot(dx, dy) || 1;
                 const ux = dx / len, uy = dy / len;
@@ -175,24 +177,32 @@
 
         const pt = canvasCoords(e);
 
-        if (state.tool === 'select') {
-            // Try to hit-test anchors/handles
+        if (state.tool === 'direct') {
+            // Direct Selection: hit-test individual anchors/handles
             const hit = hitTestAll(pt);
             if (hit) {
                 state.dragTarget = hit;
                 state.isDragging = true;
                 state.activePath = hit.pathIdx;
                 canvasArea.setPointerCapture(e.pointerId);
-                renderPathList();
-                render();
+                renderPathList(); render();
                 return;
             }
-            // Try to select a path by clicking on its fill
+            const pathIdx = hitTestPath(pt);
+            if (pathIdx >= 0) { state.activePath = pathIdx; renderPathList(); render(); }
+            return;
+        }
+
+        if (state.tool === 'select') {
+            // Selection: select & move entire path
             const pathIdx = hitTestPath(pt);
             if (pathIdx >= 0) {
                 state.activePath = pathIdx;
-                renderPathList();
-                render();
+                state.dragTarget = { pathIdx, type: 'path' };
+                state.isDragging = true;
+                state._dragLast = pt;
+                canvasArea.setPointerCapture(e.pointerId);
+                renderPathList(); render();
             }
             return;
         }
@@ -219,12 +229,13 @@
             }
 
             // Place anchor
-            const anchor = { x: pt.x, y: pt.y, hix: 0, hiy: 0, hox: 0, hoy: 0 };
+            const isStraight = state.penMode === 'line';
+            const anchor = { x: pt.x, y: pt.y, hix: 0, hiy: 0, hox: 0, hoy: 0, straight: isStraight };
             getActivePath().anchors.push(anchor);
             state.penDragStart = pt;
             state.penDragAnchorIdx = getActivePath().anchors.length - 1;
 
-            // Auto-smooth previous anchors
+            // Auto-smooth curve anchors (skip straight ones)
             autoSmoothAnchors(getActivePath());
 
             render();
@@ -274,8 +285,8 @@
             return;
         }
 
-        // Select tool drag
-        if (state.tool === 'select' && state.isDragging && state.dragTarget) {
+        // Direct Selection: drag individual anchor/handle
+        if (state.tool === 'direct' && state.isDragging && state.dragTarget) {
             const path = state.paths[state.dragTarget.pathIdx];
             if (!path) return;
             const a = path.anchors[state.dragTarget.anchorIdx];
@@ -289,6 +300,19 @@
             }
             render();
         }
+
+        // Selection: move entire path
+        if (state.tool === 'select' && state.isDragging && state.dragTarget && state.dragTarget.type === 'path') {
+            const path = state.paths[state.dragTarget.pathIdx];
+            if (!path || !state._dragLast) return;
+            const dx = pt.x - state._dragLast.x;
+            const dy = pt.y - state._dragLast.y;
+            for (const a of path.anchors) {
+                a.x += dx; a.y += dy;
+            }
+            state._dragLast = pt;
+            render();
+        }
     }
 
     function onUp(e) {
@@ -298,9 +322,10 @@
             state.penDragAnchorIdx = -1;
             saveState();
         }
-        if (state.tool === 'select' && state.isDragging) {
+        if ((state.tool === 'select' || state.tool === 'direct') && state.isDragging) {
             state.isDragging = false;
             state.dragTarget = null;
+            state._dragLast = null;
             saveState();
         }
     }
@@ -576,27 +601,30 @@
 
     function drawAnchorsAndHandles(c, path) {
         const a = path.anchors;
+        const showHandles = state.tool === 'direct' || state.tool === 'pen';
         c.save();
         for (let i = 0; i < a.length; i++) {
             const p = a[i];
             const hix = p.x+p.hix, hiy = p.y+p.hiy;
             const hox = p.x+p.hox, hoy = p.y+p.hoy;
 
-            // Handle lines
-            c.strokeStyle = 'rgba(108,138,255,0.7)';
-            c.lineWidth = 1.5;
-            c.setLineDash([]);
-            c.beginPath();
-            c.moveTo(hix, hiy); c.lineTo(p.x, p.y); c.lineTo(hox, hoy);
-            c.stroke();
-
-            // Handle dots (circles)
-            c.fillStyle = '#6c8aff';
-            [{ x:hix, y:hiy }, { x:hox, y:hoy }].forEach(h => {
+            // Handle lines (only in direct/pen mode)
+            if (showHandles) {
+                c.strokeStyle = 'rgba(108,138,255,0.7)';
+                c.lineWidth = 1.5;
+                c.setLineDash([]);
                 c.beginPath();
-                c.arc(h.x, h.y, 5, 0, Math.PI*2);
+                c.moveTo(hix, hiy); c.lineTo(p.x, p.y); c.lineTo(hox, hoy);
+                c.stroke();
+
+                // Handle dots (circles)
+                c.fillStyle = '#6c8aff';
+                [{ x:hix, y:hiy }, { x:hox, y:hoy }].forEach(h => {
+                    c.beginPath();
+                    c.arc(h.x, h.y, 5, 0, Math.PI*2);
                 c.fill();
-            });
+                });
+            } // end showHandles
 
             // Anchor (square, bigger for mobile)
             const sz = 7;
@@ -620,8 +648,12 @@
 
     function drawGrid(c) {
         const g = state.gridSize;
+        const isDark = isColorDark(state.bgColor);
+        const lineColor = isDark ? 'rgba(180,200,255,0.25)' : 'rgba(0,0,80,0.15)';
+        const centerColor = isDark ? 'rgba(180,200,255,0.5)' : 'rgba(0,0,80,0.35)';
+
         c.save();
-        c.strokeStyle = 'rgba(108,138,255,0.12)';
+        c.strokeStyle = lineColor;
         c.lineWidth = 1;
         for (let x = g; x < state.canvasW; x += g) {
             c.beginPath(); c.moveTo(x,0); c.lineTo(x,state.canvasH); c.stroke();
@@ -629,8 +661,9 @@
         for (let y = g; y < state.canvasH; y += g) {
             c.beginPath(); c.moveTo(0,y); c.lineTo(state.canvasW,y); c.stroke();
         }
-        // Center lines stronger
-        c.strokeStyle = 'rgba(108,138,255,0.25)';
+        // Center cross — much stronger
+        c.strokeStyle = centerColor;
+        c.lineWidth = 1.5;
         c.beginPath(); c.moveTo(state.canvasW/2,0); c.lineTo(state.canvasW/2,state.canvasH); c.stroke();
         c.beginPath(); c.moveTo(0,state.canvasH/2); c.lineTo(state.canvasW,state.canvasH/2); c.stroke();
         c.restore();
@@ -788,8 +821,20 @@
                 state.tool = b.dataset.tool;
                 document.querySelectorAll('.tool-btn[data-tool]').forEach(x => x.classList.remove('active'));
                 b.classList.add('active');
-                canvasArea.classList.toggle('select-mode', state.tool === 'select');
+                canvasArea.classList.toggle('select-mode', state.tool === 'select' || state.tool === 'direct');
             });
+        });
+
+        // Curve / Line mode toggle
+        $('curveBtn').addEventListener('click', () => {
+            state.penMode = 'curve';
+            $('curveBtn').classList.add('active');
+            $('lineBtn').classList.remove('active');
+        });
+        $('lineBtn').addEventListener('click', () => {
+            state.penMode = 'line';
+            $('lineBtn').classList.add('active');
+            $('curveBtn').classList.remove('active');
         });
 
         // Canvas settings
@@ -849,8 +894,13 @@
             if (e.key === 'v' || e.key === 'V') {
                 document.querySelector('.tool-btn[data-tool="select"]').click();
             }
+            if (e.key === 'a' || e.key === 'A') {
+                document.querySelector('.tool-btn[data-tool="direct"]').click();
+            }
             if (e.key === 'Enter') { closePath(); newPath(); }
             if (e.key === 'n' || e.key === 'N') { newPath(); render(); }
+            if (e.key === 'c' || e.key === 'C') { document.getElementById('curveBtn').click(); }
+            if (e.key === 'l' || e.key === 'L') { document.getElementById('lineBtn').click(); }
             if (e.key === '0' && (e.ctrlKey||e.metaKey)) { e.preventDefault(); fitView(); }
             if (e.key === 'Escape') {
                 document.getElementById('fullscreen-view').classList.add('hidden');
@@ -885,6 +935,55 @@
     window._letteringAddRect = () => addRect(state.canvasW/2, state.canvasH/2, 200, 200);
     window._letteringAddEllipse = () => addEllipse(state.canvasW/2, state.canvasH/2, 100, 100);
     window._letteringUnion = pathUnion;
+
+    // ══════════════════════
+    // UTILITY
+    // ══════════════════════
+    function isColorDark(hex) {
+        const c = hex.replace('#','');
+        const r = parseInt(c.substr(0,2),16), g = parseInt(c.substr(2,2),16), b = parseInt(c.substr(4,2),16);
+        return (r*0.299 + g*0.587 + b*0.114) < 128;
+    }
+
+    // ══════════════════════
+    // THEME TOGGLE
+    // ══════════════════════
+    window._letteringToggleTheme = function() {
+        const root = document.documentElement;
+        const isDark = getComputedStyle(root).getPropertyValue('--bg-0').trim() === '#0c0c0e';
+        if (isDark) {
+            root.style.setProperty('--bg-0', '#f0f0f2');
+            root.style.setProperty('--bg-1', '#e8e8ec');
+            root.style.setProperty('--bg-2', '#dddde2');
+            root.style.setProperty('--bg-3', '#d0d0d6');
+            root.style.setProperty('--border', '#c0c0c8');
+            root.style.setProperty('--border-hover', '#a0a0a8');
+            root.style.setProperty('--text-1', '#111113');
+            root.style.setProperty('--text-2', '#444450');
+            root.style.setProperty('--text-3', '#777780');
+            root.style.setProperty('--accent-dim', '#dde4ff');
+            state.bgColor = '#ffffff';
+            state.fillColor = '#111113';
+        } else {
+            root.style.setProperty('--bg-0', '#0c0c0e');
+            root.style.setProperty('--bg-1', '#111113');
+            root.style.setProperty('--bg-2', '#19191d');
+            root.style.setProperty('--bg-3', '#242429');
+            root.style.setProperty('--border', '#2a2a30');
+            root.style.setProperty('--border-hover', '#3a3a42');
+            root.style.setProperty('--text-1', '#e8e8ec');
+            root.style.setProperty('--text-2', '#a0a0a8');
+            root.style.setProperty('--text-3', '#686870');
+            root.style.setProperty('--accent-dim', '#1e2233');
+            state.bgColor = '#0c0c0e';
+            state.fillColor = '#e8e8ec';
+        }
+        document.getElementById('bgColor').value = state.bgColor;
+        document.getElementById('fillColor').value = state.fillColor;
+        const p = getActivePath();
+        if (p) p.color = state.fillColor;
+        render();
+    };
 
     init();
 })();
