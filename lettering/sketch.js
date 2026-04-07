@@ -171,8 +171,7 @@
     function onUp(e) {
         activePointers.delete(e.pointerId);
         if (isPointerDown && (state.tool === 'draw' || state.tool === 'erase')) {
-            vectorize(); // re-trace after painting
-            render();
+            render(); // just re-render pixels, no auto vectorize
         }
         isPointerDown = false;
         state.isDragging = false;
@@ -194,6 +193,8 @@
         const col = Math.floor(pt.x / cs.w);
         const row = Math.floor(pt.y / cs.h);
         setPx(col, row, fill ? 1 : 0);
+        // Clear vectorized paths — user is editing pixels again
+        if (state.paths.length > 0) state.paths = [];
     }
 
 
@@ -497,9 +498,15 @@
 
     function drawPixels(c) {
         const cs = cellSize();
-        const isDark = isColorDark(state.bgColor);
+        const hasVector = state.paths.length > 0;
         c.save();
-        c.fillStyle = isDark ? 'rgba(180,200,255,0.15)' : 'rgba(0,0,80,0.1)';
+        // Before vectorize: solid fill color. After vectorize: dim ghost.
+        if (hasVector) {
+            const isDark = isColorDark(state.bgColor);
+            c.fillStyle = isDark ? 'rgba(180,200,255,0.12)' : 'rgba(0,0,80,0.08)';
+        } else {
+            c.fillStyle = state.fillColor;
+        }
         for (let r = 0; r < state.gridRows; r++) {
             for (let col = 0; col < state.gridCols; col++) {
                 if (getPx(col, r)) {
